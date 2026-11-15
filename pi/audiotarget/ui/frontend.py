@@ -36,6 +36,8 @@ LENS_PRESETS: list[tuple[str, str, float]] = [
     ("Pi H Q camera with 25 millimetre lens", "picamera2", 14.3),
     ("Pi H Q camera with 35 millimetre lens", "picamera2", 10.3),
     ("Pi H Q camera with 50 millimetre lens", "picamera2", 7.2),
+    ("Camera Module 2 size, 12 millimetre M12 lens", "picamera2", 17.4),
+    ("Camera Module 2 size, 16 millimetre M12 lens", "picamera2", 13.1),
     ("Pi Camera Module 3", "picamera2", 66.0),
     ("Pi Camera Module 3 wide", "picamera2", 102.0),
     ("U S B camera, narrow, 30 degrees", "v4l2", 30.0),
@@ -44,6 +46,7 @@ LENS_PRESETS: list[tuple[str, str, float]] = [
 
 DETECTORS = [
     ("Printed AudioTarget card, recommended", "card"),
+    ("Printed card, then machine learning for other targets", "card_ml"),
     ("Card markers only", "aruco"),
     ("Plain bullseye rings only", "bullseye"),
     ("Machine learning model", "onnx"),
@@ -143,6 +146,8 @@ class Frontend:
         elif event == "camera_error" and self._camera_was is not False:
             text = "Camera not found. Retrying."
             self._camera_was = False
+        elif event == "model_error":
+            text = "Machine learning model not found or not working. Using the printed card only."
         elif event == "zeroed_cam":
             text = "Zeroed on target."
         elif event == "zeroed_tilt":

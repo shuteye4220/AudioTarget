@@ -10,6 +10,8 @@ sources: change the settings at the top of each and export again.
 | `camera_mount_hq.stl` | Camera plate on a Picatinny clamp, for the Pi HQ camera | As exported: clamp down |
 | `pi_case_zero2w_*.stl` | Belt case for a Pi Zero 2 W: tray, lid (3 buttons), belt loop | As exported |
 | `pi_case_pi5_*.stl` | The same for a Pi 5 (also fits a Pi 3 or 4) | As exported |
+| `gun_pi_box_m12_*.stl` | Layout 2: Pi Zero 2 W + M12-lens camera on the rail, 3 menu buttons on the lid | As exported |
+| `gun_pi_box_hq_*.stl` | Layout 2 with the Pi HQ camera (taller box) | As exported |
 
 ## Settings
 
@@ -33,5 +35,5 @@ sources: change the settings at the top of each and export again.
 
 - Gun module: **round** cap = ZERO (toward the muzzle), **square** cap = MODE
   (toward you), with an engraved groove between them.
-- Pi case: three round buttons in a line. The big middle one is Select. The
+- Pi case and layout 2 box: three round buttons in a line. The big middle one is Select. The
   one with **one** dimple beside it is Up, the one with **two** is Down.

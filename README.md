@@ -31,52 +31,25 @@ Pi's Bluetooth audio, or both.
 | `pi/` | Python service for the Pi: camera tracking, links, tones, spoken menu |
 | `image/` | Builds the flashable Pi SD-card image (also installs onto an existing Pi) |
 | `hardware/` | OpenSCAD sources and ready STL files for 3D printing |
-| `docs/` | Wiring, buttons and sounds, protocol, range, Pi image guide |
+| `docs/` | Layouts and parts, wiring, buttons and sounds, protocol, range, Pi image, ML |
 
-## Parts list
+## Layouts and parts
 
-### Gun module
+The camera always rides on the gun. The Pi can go on your belt (layout 1, any
+Pi from Zero 2 W to Pi 5) or on the gun next to the camera (layout 2, Pi Zero
+2 W, just a power cable to the belt). Full specs, parts lists, cabling and
+power for both are in **docs/layouts.md**.
 
-| Qty | Part | Notes |
-|---|---|---|
-| 1 | Seeed Studio XIAO nRF52840 **Sense** | Must be the Sense version: it has the motion sensor |
-| 1 | LiPo cell, 3.7 V, 300 to 500 mAh, about 35 x 20 x 5 mm (502035 size) | Solders to the XIAO's battery pads, which charge it over USB-C |
-| 1 | Mini slide switch (SS12D00 style) | In the battery's + lead, for storage |
-| 2 | 12 x 12 mm tactile switches | One with a **round** cap (ZERO), one with a **square** cap (MODE) |
-| 1 | 3.5 mm stereo panel jack, 6 mm thread (PJ-392 style) | Headphone output |
-| 2 | 1 kΩ resistors | Audio filter, see docs/wiring.md |
-| 2 | 22 nF capacitors (film or C0G) | Audio filter |
-| 2 | 220 µF electrolytic capacitors, 6.3 V or more | DC blocking for earphones |
-| 1 | M4 x 35 bolt and M4 nut | Rail clamp cross bolt |
-| 4 | M2.5 x 8 self-tapping screws | Lid |
-| | Small perfboard, thin wire | |
-| | Wired link only: 3-core cable (TX, RX, ground), 1 to 1.5 m | Not needed for Bluetooth |
+In short:
 
-### Camera (optional, needed for left/right)
-
-| Qty | Part | Notes |
-|---|---|---|
-| 1 | Camera, one of: | Narrow lenses see further (docs/range.md) |
-| | a) Raspberry Pi HQ Camera + 16 mm or 25 mm C-mount lens | Best range. Needs a ribbon cable to the Pi |
-| | b) USB (UVC) camera module with a narrow M12 lens | Easiest with the Pi on your belt: just a USB cable |
-| 4 | M2.5 x 12 screws, nuts, 6 mm spacers | Camera to mount |
-| 1 | M4 x 35 bolt and M4 nut | Rail clamp |
-| | Long camera ribbon (Pi camera) or USB cable + adapter (USB camera) | Gun to belt |
-
-### Pi (optional, needed for the camera)
-
-| Qty | Part | Notes |
-|---|---|---|
-| 1 | Raspberry Pi Zero 2 W, 3, 4, 5 or 500 | Same SD-card image for all. A Pi 5 tracks further and faster |
-| 1 | microSD card, 16 GB or more | |
-| 1 | USB power bank | Pi 5 wants a 5 V 3 A (or better) supply |
-| 1 | Audio out: Bluetooth headset or speaker, **or** a USB sound card | The Zero 2 W and Pi 5 have no headphone jack |
-| 3 | 12 x 12 mm tactile switches + caps | Belt-case menu buttons: Up, Select, Down |
-| | Optional: any USB numeric keypad or keyboard | Works with the menu as well as, or instead of, the buttons |
-| 4 | M3 x 12 bolts + nuts | Belt loop to case |
-| 4 | M2.5 x 6 screws | Pi to case standoffs |
-| 4 | M2.5 x 8 self-tapping screws | Case lid |
-| | Printed target cards (`pi/tools/make_card.py`) | |
+- **Gun module (both layouts):** Seeed XIAO nRF52840 Sense, small LiPo, two
+  tactile buttons, 3.5 mm jack, a few resistors and capacitors.
+- **Layout 1:** a Pi HQ camera or USB camera on a rail mount, and any Pi in a
+  belt case with three menu buttons and a power bank.
+- **Layout 2:** a Pi Zero 2 W and an M12-lens camera in one rail box, and a
+  power bank on the belt.
+- **Either way:** Bluetooth headset or USB sound card for the Pi's speech, and
+  printed target cards.
 
 ## Getting started
 
@@ -90,6 +63,8 @@ Pi's Bluetooth audio, or both.
    mount calibration once, with the box on the gun.
 5. **Optional, Pi and camera:** flash the SD-card image (`docs/pi-image.md`),
    print a target card, and pair the gun module from the spoken menu.
+6. **Optional, other targets:** for plain bullseyes and steel plates without a
+   printed card, add the ML fallback (`docs/ml.md`, best on a Pi 5).
 
 ## Building
 

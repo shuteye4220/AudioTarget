@@ -54,7 +54,8 @@ Each item is read with its position, for example "Camera. 7 of 9".
   paired devices
 - **Gun module:** pair by Bluetooth, connection type (wire, Bluetooth or both),
   whether this Pi also plays the guidance tones
-- **Camera:** camera and lens preset, target type, flip the picture
+- **Camera:** camera and lens preset, target type (including "Printed card, then
+  machine learning", see docs/ml.md), flip the picture
 - **Speech:** faster, slower, status announcements on or off
 - **System:** speak the network address, restart, shut down. Restart and shut
   down ask you to press Select a second time to confirm.

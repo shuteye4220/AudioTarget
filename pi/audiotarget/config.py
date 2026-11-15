@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
@@ -43,7 +44,7 @@ class CameraCfg:
 
 @dataclass
 class DetectorCfg:
-    type: str = "card"  # "card" (markers, then rings), "aruco", "bullseye", "onnx"
+    type: str = "card"  # "card" (markers, then rings), "card_ml", "aruco", "bullseye", "onnx"
     card_size_mm: float = 200.0
     marker_size_mm: float = 40.0
     marker_margin_mm: float = 8.0
@@ -51,7 +52,7 @@ class DetectorCfg:
     bullseye_outer_mm: float = 120.0
     onnx_model: str = ""
     onnx_input: int = 640
-    onnx_class: int = 0
+    onnx_classes: str = "0"  # comma-separated class ids that count as a target
     onnx_conf: float = 0.4
     onnx_target_width_mm: float = 0.0
 
@@ -140,10 +141,15 @@ def validate(cfg: Config) -> None:
         raise ConfigError("camera.backend must be 'picamera2' or 'v4l2'")
     if cfg.camera.hfov_deg <= 0 and not cfg.camera.calibration:
         raise ConfigError("set camera.hfov_deg (lens field of view) or camera.calibration")
-    if cfg.detector.type not in ("card", "aruco", "bullseye", "onnx"):
-        raise ConfigError("detector.type must be 'card', 'aruco', 'bullseye' or 'onnx'")
-    if cfg.detector.type == "onnx" and not cfg.detector.onnx_model:
-        raise ConfigError("detector.onnx_model is required for the onnx detector")
+    if cfg.detector.type not in ("card", "card_ml", "aruco", "bullseye", "onnx"):
+        raise ConfigError("detector.type must be 'card', 'card_ml', 'aruco', 'bullseye' or 'onnx'")
+    if cfg.detector.type in ("onnx", "card_ml"):
+        if not cfg.detector.onnx_model:
+            raise ConfigError("detector.onnx_model is required for machine-learning detection")
+        if not re.fullmatch(r"\s*\d{1,3}(\s*,\s*\d{1,3})*\s*", cfg.detector.onnx_classes):
+            raise ConfigError("detector.onnx_classes must be numbers separated by commas")
+        if cfg.detector.onnx_input not in (160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480, 512, 544, 576, 608, 640):
+            raise ConfigError("detector.onnx_input must be a multiple of 32 from 160 to 640")
     if cfg.link.mode not in ("serial", "ble", "both", "none"):
         raise ConfigError("link.mode must be 'serial', 'ble', 'both' or 'none'")
     d = cfg.detector

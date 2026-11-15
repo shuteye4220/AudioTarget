@@ -64,6 +64,40 @@ def make_detector(cfg: DetectorCfg, intr: Intrinsics) -> Detector:
     raise ValueError(f"unknown detector {cfg.type}")
 
 
+class Fallback:
+    """Use the primary pipeline; only when it fails, ask the (slower) secondary."""
+
+    def __init__(self, primary, secondary) -> None:
+        self.primary, self.secondary = primary, secondary
+
+    def reset(self) -> None:
+        self.primary.reset()
+        self.secondary.reset()
+
+    def detect(self, gray: np.ndarray) -> Detection | None:
+        det = self.primary.detect(gray)
+        if det is not None:
+            self.secondary.reset()
+            return det
+        return self.secondary.detect(gray)
+
+
+def make_pipeline(cfg: DetectorCfg, intr: Intrinsics):
+    """Full-frame target finder for the camera loop (has detect(gray) and reset())."""
+    from .ml_tracker import MlTracker
+
+    if cfg.type == "onnx":
+        from .onnx import OnnxDetector
+
+        return MlTracker(OnnxDetector(cfg, intr))
+    if cfg.type == "card_ml":
+        from .onnx import OnnxDetector
+
+        card = RoiTracker(make_detector(DetectorCfg(**{**cfg.__dict__, "type": "card"}), intr))
+        return Fallback(card, MlTracker(OnnxDetector(cfg, intr)))
+    return RoiTracker(make_detector(cfg, intr))
+
+
 class RoiTracker:
     """Search a window around the last hit first: much faster on a Pi Zero.
 
@@ -75,6 +109,9 @@ class RoiTracker:
         self.scale = scale
         self.min_px = min_px
         self.last: Detection | None = None
+
+    def reset(self) -> None:
+        self.last = None
 
     def detect(self, gray: np.ndarray) -> Detection | None:
         if self.last is not None:

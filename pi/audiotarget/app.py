@@ -10,8 +10,8 @@ from dataclasses import dataclass
 
 from . import protocol
 from .camera import open_camera
-from .config import Config
-from .detectors import RoiTracker, make_detector
+from .config import Config, DetectorCfg
+from .detectors import make_pipeline
 from .geometry import Intrinsics
 from .transport import BleLink, LinkManager, SerialLink
 
@@ -112,13 +112,22 @@ class App:
         if self.loop is not None and not self.dry_run:
             self.loop.call_soon_threadsafe(self.links.send, line)
 
+    def _make_tracker(self, intr: Intrinsics):
+        try:
+            return make_pipeline(self.cfg.detector, intr)
+        except Exception as e:  # missing or broken ML model: keep going on the card
+            log.error("detector %s unavailable (%s); using the printed card", self.cfg.detector.type, e)
+            self._notify_ui("model_error")
+            fallback = DetectorCfg(**{**self.cfg.detector.__dict__, "type": "card"})
+            return make_pipeline(fallback, intr)
+
     def _track(self, cam, intr: Intrinsics, exposure_latency_ms: float) -> None:
-        tracker = RoiTracker(make_detector(self.cfg.detector, intr))
+        tracker = self._make_tracker(intr)
         last_print = window_start = time.monotonic()
         frames = hits = 0
         while not self.stop.is_set():
             if not self.tracking.is_set():
-                tracker.last = None
+                tracker.reset()
                 self.fps = 0.0
                 self.tracking.wait(0.5)
                 continue

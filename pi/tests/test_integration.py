@@ -81,3 +81,17 @@ def test_camera_to_serial_and_tones_back(monkeypatch):
     assert a.describe_fix().startswith("target 1.5 degrees right, 0.7")
     os.close(master)
     os.close(slave)
+
+
+def test_missing_model_falls_back_to_card():
+    from audiotarget.config import DetectorCfg
+    from audiotarget.detectors import RoiTracker
+
+    cfg = Config()
+    cfg.camera.hfov_deg = 22.2
+    cfg.detector = DetectorCfg(type="card_ml", onnx_model="/nonexistent/model.onnx")
+    a = app_mod.App(cfg, dry_run=True)
+    events = []
+    a._notify_ui = events.append
+    tracker = a._make_tracker(Intrinsics.from_hfov(1280, 720, 22.2))
+    assert isinstance(tracker, RoiTracker) and events == ["model_error"]

@@ -9,6 +9,11 @@ hfov_deg = 22.2           # lens field of view (Pi HQ camera + 16 mm lens)
 
 [detector]
 type = "card"             # printed AudioTarget card (markers, then rings)
+# For "card_ml" / "onnx", put a model here (see docs/ml.md):
+onnx_model = "/var/lib/audiotarget/models/targets.onnx"
+onnx_input = 320
+onnx_classes = "0,1,2"
+onnx_conf = 0.25
 
 [link]
 mode = "both"             # wire and Bluetooth to the gun module

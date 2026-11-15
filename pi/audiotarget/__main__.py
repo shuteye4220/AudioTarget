@@ -10,6 +10,17 @@ import sys
 from .config import ConfigError, load
 
 
+def _speak(text: str) -> None:
+    """Best effort: on an eyes-free device a silent failure is the worst kind."""
+    import subprocess
+
+    try:
+        subprocess.run(["espeak-ng", "--", text[:300]], timeout=30, check=False,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(prog="audiotarget", description=__doc__)
     ap.add_argument("-c", "--config", help="TOML config file")
@@ -22,8 +33,9 @@ def main() -> int:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     try:
         cfg = load(args.config)
-    except (ConfigError, OSError) as e:
+    except (ConfigError, OSError, ValueError) as e:
         print(f"config error: {e}", file=sys.stderr)
+        _speak(f"AudioTarget settings error. {e}")
         return 2
 
     from .app import App

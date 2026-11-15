@@ -55,10 +55,13 @@ python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -c "import bleak" 2>/dev/null || "$VENV/bin/pip" install --no-cache-dir "bleak>=0.21,<2"
 "$VENV/bin/python" -c "import cv2, cv2.aruco" 2>/dev/null || \
 	"$VENV/bin/pip" install --no-cache-dir "opencv-contrib-python-headless>=4.7,<6"
+# Faster ML inference than OpenCV's DNN module; optional, so don't fail the install.
+"$VENV/bin/python" -c "import onnxruntime" 2>/dev/null || \
+	"$VENV/bin/pip" install --no-cache-dir "onnxruntime>=1.17,<2" || echo "onnxruntime not installed; ML will use OpenCV"
 "$VENV/bin/pip" install --no-cache-dir --no-deps --force-reinstall "$SRC/pi"
 
 echo "== config"
-install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_HOME"
+install -d -o "$APP_USER" -g "$APP_USER" -m 0750 "$APP_HOME" "$APP_HOME/models"
 if [ ! -f "$APP_HOME/audiotarget.toml" ]; then
 	install -o "$APP_USER" -g "$APP_USER" -m 0640 "$SRC/image/rootfs/audiotarget.toml" \
 		"$APP_HOME/audiotarget.toml"

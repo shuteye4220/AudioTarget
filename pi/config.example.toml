@@ -15,16 +15,17 @@ exposure_latency_ms = 15.0   # added to frame age: about one exposure + readout
 rotate_180 = false           # camera mounted upside down
 
 [detector]
-type = "card"                # "card" (markers, then rings), "aruco", "bullseye", "onnx"
+type = "card"                # "card" (markers, then rings), "card_ml" (card, then ML model),
+                             # "aruco", "bullseye", "onnx" (ML model only)
 card_size_mm = 200.0         # must match the printed card (tools/make_card.py prints these)
 marker_size_mm = 40.0
 marker_margin_mm = 8.0
 marker_id_base = 0
 bullseye_outer_mm = 120.0    # for range estimates from the rings
-onnx_model = ""              # YOLO-style .onnx model for type = "onnx"
-onnx_input = 640
-onnx_class = 0
-onnx_conf = 0.4
+onnx_model = ""              # .onnx model for "onnx" / "card_ml" (pi/tools/export_model.py)
+onnx_input = 640             # model input size the model was exported with
+onnx_classes = "0"           # class ids that count as a target, e.g. "0,1,2"
+onnx_conf = 0.4              # minimum score
 onnx_target_width_mm = 0.0   # real target width, for range estimates (0 = no range)
 
 [link]
