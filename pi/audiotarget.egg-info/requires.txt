@@ -1,0 +1,11 @@
+numpy
+opencv-python-headless>=4.6
+pyserial>=3.5
+bleak>=0.21
+
+[dev]
+pytest
+
+[pi]
+evdev
+sounddevice

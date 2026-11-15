@@ -1,0 +1,2 @@
+[console_scripts]
+audiotarget = audiotarget.__main__:main

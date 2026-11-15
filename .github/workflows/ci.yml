@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install numpy opencv-python-headless pyserial bleak pytest
+      - run: python -m pytest -q
+        working-directory: pi
+      - run: bash -n image/install.sh
+
+  firmware-host-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: make -C firmware/tests/host run
+
+  firmware:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ble: [ON, OFF]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: AudioTarget
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: AudioTarget/firmware
+          toolchains: arm-zephyr-eabi
+      - run: west build -p -b xiao_ble/nrf52840/sense -d build AudioTarget/firmware -- -DAT_BLE=${{ matrix.ble }}

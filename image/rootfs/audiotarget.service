@@ -1,0 +1,16 @@
+[Unit]
+Description=AudioTarget camera tracker and spoken menu
+Wants=pipewire.service wireplumber.service pipewire-pulse.service
+After=pipewire.service wireplumber.service
+
+[Service]
+ExecStart=/opt/audiotarget/venv/bin/python -m audiotarget --config %h/audiotarget.toml
+Restart=always
+RestartSec=3
+# Sandboxing like ProtectSystem= would make a user service map groups away
+# (PrivateUsers), losing access to the camera, keypad and serial port.
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,88 @@
+name: Release
+
+# Push a tag like v0.1.0 to build the firmware and the SD-card image and
+# attach them to a GitHub release.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: AudioTarget
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: zephyrproject-rtos/action-zephyr-setup@v1
+        with:
+          app-path: AudioTarget/firmware
+          toolchains: arm-zephyr-eabi
+      - name: Build
+        run: |
+          west build -p -b xiao_ble/nrf52840/sense -d build-ble AudioTarget/firmware -- -DAT_BLE=ON
+          west build -p -b xiao_ble/nrf52840/sense -d build-wired AudioTarget/firmware -- -DAT_BLE=OFF
+          mkdir out
+          cp build-ble/zephyr/zephyr.uf2 out/audiotarget-xiao-sense.uf2
+          cp build-wired/zephyr/zephyr.uf2 out/audiotarget-xiao-sense-wired-only.uf2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: out/*.uf2
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage sources for the image
+        run: |
+          mkdir -p image/stage-audiotarget/00-audiotarget/files/src
+          dest=image/stage-audiotarget/00-audiotarget/files/src
+          mkdir -p "$dest/image"
+          cp -a pi "$dest/"
+          cp -a image/install.sh image/rootfs "$dest/image/"
+          rm -rf "$dest/pi/tests"
+      - name: Random build-time password (never published)
+        id: pw
+        run: |
+          pw="$(openssl rand -base64 30 | tr -d '/+=\n')"
+          echo "::add-mask::$pw"
+          echo "value=$pw" >> "$GITHUB_OUTPUT"
+      - uses: usimd/pi-gen-action@v1
+        id: build
+        with:
+          image-name: audiotarget
+          pi-gen-version: arm64
+          stage-list: stage0 stage1 stage2 ./image/stage-audiotarget
+          compression: xz
+          compression-level: 6
+          enable-ssh: 0
+          # No usable default login: set your own user (and Wi-Fi/SSH if wanted)
+          # in Raspberry Pi Imager's OS customisation when you flash.
+          password: ${{ steps.pw.outputs.value }}
+          increase-runner-disk-size: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: ${{ steps.build.outputs.image-path }}
+          compression-level: 0
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [firmware, image]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

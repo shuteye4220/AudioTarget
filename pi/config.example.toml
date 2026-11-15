@@ -1,0 +1,47 @@
+# AudioTarget Pi settings: every option with its default.
+
+# "auto" reads the board model. Or force one: "zero2w" (also Pi 3), "pi4", "pi5".
+profile = "auto"
+
+[camera]
+backend = "picamera2"        # "picamera2" (ribbon camera) or "v4l2" (USB camera)
+device = "0"                 # v4l2 only: index or /dev/videoN
+width = 0                    # 0 = profile default (1280x720 / 1600x900 / 1920x1080)
+height = 0
+fps = 0
+hfov_deg = 0.0               # lens horizontal field of view (required unless calibration is set)
+calibration = ""             # optional OpenCV calibration .npz (K, dist, width, height)
+exposure_latency_ms = 15.0   # added to frame age: about one exposure + readout
+rotate_180 = false           # camera mounted upside down
+
+[detector]
+type = "card"                # "card" (markers, then rings), "aruco", "bullseye", "onnx"
+card_size_mm = 200.0         # must match the printed card (tools/make_card.py prints these)
+marker_size_mm = 40.0
+marker_margin_mm = 8.0
+marker_id_base = 0
+bullseye_outer_mm = 120.0    # for range estimates from the rings
+onnx_model = ""              # YOLO-style .onnx model for type = "onnx"
+onnx_input = 640
+onnx_class = 0
+onnx_conf = 0.4
+onnx_target_width_mm = 0.0   # real target width, for range estimates (0 = no range)
+
+[link]
+mode = "both"                # "serial", "ble", "both" (or "none")
+serial_port = "/dev/serial0"
+baud = 115200
+ble_name = "AudioTarget"
+ble_address = ""             # pin to one gun module (the voice menu fills this in)
+
+[audio]
+bluetooth_tones = true       # play guidance tones on this Pi's audio output
+device = ""                  # sounddevice output name; "" = system default
+sample_rate = 48000
+
+[ui]
+enabled = false              # spoken menu (the SD-card image turns this on)
+voice = "en-us"              # espeak-ng voice
+speech_rate = 175
+long_press_ms = 800          # holding Select this long means Back
+announce = true              # speak gun-module and camera status changes

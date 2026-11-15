@@ -1,0 +1,13 @@
+
+# --- AudioTarget begin ---
+# UART on GPIO14 (TX, pin 8) / GPIO15 (RX, pin 10) for the wired gun-module link
+enable_uart=1
+[pi5]
+dtparam=uart0=on
+[all]
+# Belt-case buttons (to GND, internal pull-ups) appear as keyboard keys
+#   GPIO5  (pin 29) = Up,  GPIO6 (pin 31) = Down,  GPIO13 (pin 33) = Select
+dtoverlay=gpio-key,gpio=5,active_low=1,gpio_pull=up,keycode=103,label=up
+dtoverlay=gpio-key,gpio=6,active_low=1,gpio_pull=up,keycode=108,label=down
+dtoverlay=gpio-key,gpio=13,active_low=1,gpio_pull=up,keycode=28,label=select
+# --- AudioTarget end ---

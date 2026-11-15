@@ -1,0 +1,66 @@
+mainmenu "AudioTarget gun module"
+
+menu "AudioTarget"
+
+config AT_LINK_UART
+	bool "Wired UART link to the Pi"
+	default y
+	select SERIAL
+	select UART_INTERRUPT_DRIVEN
+	help
+	  Line protocol over the UART named by the zephyr,user link-uart
+	  property. Turn off if you only use Bluetooth: the UART receiver
+	  keeps the high-frequency clock running.
+
+config AT_LINK_BLE
+	bool "Bluetooth LE link to the Pi (Nordic UART Service)"
+	default y
+	depends on BT_ZEPHYR_NUS && BT_SMP
+	help
+	  Encrypted, bonded NUS link. Only bonded devices may connect, except
+	  during the pairing window.
+
+config AT_PAIRING_WINDOW_S
+	int "Pairing window length (seconds)"
+	default 120
+
+config AT_IMU_FWD_AXIS
+	int "Sensor axis that points along the barrel (1=X 2=Y 3=Z, negative = reversed)"
+	range -3 3
+	default 1
+	help
+	  Default mounting until the audio-guided two-pose calibration has
+	  been run (hold both buttons). Calibration overrides this.
+
+config AT_IMU_UP_AXIS
+	int "Sensor axis that points up (1=X 2=Y 3=Z, negative = reversed)"
+	range -3 3
+	default 3
+
+config AT_BASE_NOTE_HZ
+	int "Tone played when on target (Hz)"
+	default 440
+
+config AT_MDEG_PER_SEMITONE
+	int "Vertical error per semitone (millidegrees)"
+	range 10 2000
+	default 100
+
+config AT_QUANTIZE
+	bool "Snap pitch to whole semitones"
+	default y
+
+config AT_LINK_LATENCY_MS
+	int "Extra link latency added to the camera frame age (ms)"
+	default 5
+	help
+	  Roughly 2-5 ms for UART, 10-30 ms for BLE depending on connection
+	  interval.
+
+config AT_IDLE_OFF_MIN
+	int "Power off after this many minutes without movement (0 = never)"
+	default 10
+
+endmenu
+
+source "Kconfig.zephyr"

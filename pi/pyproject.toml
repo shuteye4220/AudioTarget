@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audiotarget"
+version = "0.1.0"
+description = "Camera target tracking and spoken menu for the AudioTarget aiming aid"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "opencv-python-headless>=4.6",
+    "pyserial>=3.5",
+    "bleak>=0.21,<2",
+]
+
+[project.optional-dependencies]
+pi = ["evdev", "sounddevice"]   # picamera2 comes from apt (python3-picamera2)
+dev = ["pytest"]
+
+[project.scripts]
+audiotarget = "audiotarget.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["audiotarget*"]

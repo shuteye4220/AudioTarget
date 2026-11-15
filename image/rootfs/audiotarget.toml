@@ -1,0 +1,20 @@
+# AudioTarget settings. The spoken menu edits this file; you can too
+# (then restart, or reboot). Every option is listed in pi/config.example.toml.
+
+profile = "auto"          # picks camera resolution for Zero 2 W / Pi 3, Pi 4, Pi 5
+
+[camera]
+backend = "picamera2"     # "picamera2" = ribbon camera, "v4l2" = USB camera
+hfov_deg = 22.2           # lens field of view (Pi HQ camera + 16 mm lens)
+
+[detector]
+type = "card"             # printed AudioTarget card (markers, then rings)
+
+[link]
+mode = "both"             # wire and Bluetooth to the gun module
+
+[audio]
+bluetooth_tones = true    # play guidance tones on the Pi's audio (Bluetooth headset)
+
+[ui]
+enabled = true            # spoken menu
