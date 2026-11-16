@@ -59,7 +59,7 @@ class DecodeTest {
         d[0 * n + 9] = 10f; d[1 * n + 9] = 20f; d[2 * n + 9] = 30f; d[3 * n + 9] = 40f
         d[(4 + 1) * n + 9] = 0.7f
         val out = YoloDecode.decode(d, longArrayOf(1, rows.toLong(), n.toLong()), intArrayOf(0, 1, 2), 0.5f)
-        assertArrayEquals(floatArrayOf(10f, 20f, 30f, 40f, 0.7f), out, 1e-6f)
+        assertArrayEquals(floatArrayOf(10f, 20f, 30f, 40f, 0.7f, 1f), out, 1e-6f)
         assertNull(YoloDecode.decode(d, longArrayOf(1, rows.toLong(), n.toLong()), intArrayOf(0, 1, 2), 0.8f))
     }
 
@@ -68,8 +68,22 @@ class DecodeTest {
         floatArrayOf(100f, 50f, 140f, 90f, 0.8f, 2f).copyInto(d, 4 * 6)
         floatArrayOf(0f, 0f, 10f, 10f, 0.9f, 7f).copyInto(d, 5 * 6)
         val out = YoloDecode.decode(d, longArrayOf(1, 300, 6), intArrayOf(2), 0.5f)
-        assertArrayEquals(floatArrayOf(120f, 70f, 40f, 40f, 0.8f), out, 1e-6f)
+        assertArrayEquals(floatArrayOf(120f, 70f, 40f, 40f, 0.8f, 2f), out, 1e-6f)
         assertNull(YoloDecode.decode(d, longArrayOf(1, 300, 6), intArrayOf(3), 0.5f))
+    }
+
+    @Test fun onlyChosenClassesCount() {
+        // 80-class raw output: a strong "chair" (56) and a weaker "person" (0) elsewhere.
+        val n = 10
+        val rows = 84
+        val d = FloatArray(rows * n)
+        d[(4 + 56) * n + 2] = 0.9f
+        d[(4 + 0) * n + 7] = 0.6f
+        val shape = longArrayOf(1, rows.toLong(), n.toLong())
+        assertEquals(56f, YoloDecode.decode(d, shape, IntArray(80) { it }, 0.3f)!![5], 0f)
+        val personOnly = YoloDecode.decode(d, shape, intArrayOf(0), 0.3f)!!
+        assertEquals(0f, personOnly[5], 0f)
+        assertEquals(0.6f, personOnly[4], 1e-6f)
     }
 
     @Test fun metadataNames() {

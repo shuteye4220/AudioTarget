@@ -1,0 +1,66 @@
+name: Phone prototype APK
+
+# Every change to the phone app on main builds an APK with the built-in object
+# model and publishes it at a fixed address:
+#   https://github.com/shuteye4220/AudioTarget/releases/download/android-latest/audiotarget-phone.apk
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Export the built-in object model (YOLO26n, COCO, 640)
+        run: |
+          pip install --quiet torch torchvision --index-url https://download.pytorch.org/whl/cpu
+          pip install --quiet "ultralytics>=8.3" onnx onnxslim
+          python - <<'PY'
+          import shutil
+          from ultralytics import YOLO
+          path = YOLO("yolo26n.pt").export(format="onnx", imgsz=640, simplify=True)
+          shutil.move(path, "android/app/src/main/assets/coco.onnx")
+          PY
+          ls -la android/app/src/main/assets/
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Test and build
+        run: |
+          gradle --no-daemon -p android testReleaseUnitTest assembleRelease
+          cp android/app/build/outputs/apk/release/app-release.apk audiotarget-phone.apk
+          sha256sum audiotarget-phone.apk | tee audiotarget-phone.apk.sha256
+
+      - name: Publish to the android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest audiotarget-phone.apk audiotarget-phone.apk.sha256 \
+            --prerelease --target "$GITHUB_SHA" \
+            --title "Phone prototype (latest build)" \
+            --notes "Built from ${GITHUB_SHA::7}. Download audiotarget-phone.apk and install it.
+
+          This APK includes the YOLO26n object-detection model (Ultralytics, AGPL-3.0),
+          trained on the COCO everyday-objects dataset. The app's source is in this repository."

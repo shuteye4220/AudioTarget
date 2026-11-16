@@ -32,6 +32,7 @@ class MlTracker(private val detector: SlowDetector) {
     @Volatile private var pos: Pair<Double, Double>? = null
     private var size = 0.0
     private var score = 0.0
+    @Volatile private var classId = -1
 
     // Stats, read by the status announcement
     @Volatile var lastInferenceMs = 0L
@@ -78,6 +79,7 @@ class MlTracker(private val detector: SlowDetector) {
                     template = t
                     pos = det.x to det.y
                     size = det.size
+                    classId = det.classId
                     fresh = det
                 }
             } else if (template == null) {
@@ -101,7 +103,7 @@ class MlTracker(private val detector: SlowDetector) {
         }
         pos = m.first to m.second
         score = m.third
-        return Detection(m.first, m.second, size, score)
+        return Detection(m.first, m.second, size, score, classId)
     }
 
     /** Stop the worker and wait for a running detection to finish. */

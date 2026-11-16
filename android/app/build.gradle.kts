@@ -15,9 +15,25 @@ android {
         versionName = "0.1-prototype"
     }
 
+    // One fixed key for every build, so a newer APK installs over an older one.
+    // It's deliberately public (committed): fine for a camera-only prototype with
+    // no internet permission, NOT for anything you'd publish to an app store.
+    signingConfigs {
+        create("prototype") {
+            storeFile = rootProject.file("prototype.keystore")
+            storePassword = "audiotarget-prototype"
+            keyAlias = "prototype"
+            keyPassword = "audiotarget-prototype"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("prototype")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("prototype")
         }
     }
     compileOptions {

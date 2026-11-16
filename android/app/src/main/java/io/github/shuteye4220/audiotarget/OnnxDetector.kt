@@ -22,7 +22,9 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
     private val inputName: String
     val size: Int
     val classNames: List<String>
-    private val classes: IntArray
+    val classCount: Int
+    /** Which classes count as a target (default: all). */
+    @Volatile var classes: IntArray
     @Volatile var conf = 0.25f
     private var tries = 0
     private val input: FloatBuffer
@@ -42,7 +44,8 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
         size = shape.last().toInt().let { if (it > 0) it else 320 }
         val names = try { session.metadata.customMetadata["names"] } catch (e: Exception) { null }
         classNames = YoloDecode.classNames(names)
-        classes = IntArray(YoloDecode.classCount(names)) { it }
+        classCount = YoloDecode.classCount(names)
+        classes = IntArray(classCount) { it }
         input = ByteBuffer.allocateDirect(4 * 3 * size * size).order(ByteOrder.nativeOrder()).asFloatBuffer()
         plane = FloatArray(size * size)
     }
@@ -97,7 +100,7 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
             tries = FULL_FRAME_EVERY - 1 // cut off by the crop: look at the whole frame next
             return null
         }
-        return Detection(cx + x0, cy + y0, max(bw, bh), best[4].toDouble())
+        return Detection(cx + x0, cy + y0, max(bw, bh), best[4].toDouble(), best[5].toInt())
     }
 
     override fun close() {

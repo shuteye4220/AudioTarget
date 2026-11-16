@@ -10,13 +10,13 @@ class Frame(val data: ByteArray, val w: Int, val h: Int) {
     fun at(x: Int, y: Int): Int = data[y * w + x].toInt() and 0xFF
 }
 
-/** Aim point in full-frame pixels. */
-data class Detection(val x: Double, val y: Double, val size: Double, val score: Double)
+/** Aim point in full-frame pixels, and what kind of thing it is (class id, -1 if unknown). */
+data class Detection(val x: Double, val y: Double, val size: Double, val score: Double, val classId: Int = -1)
 
 /**
  * YOLO output decoding (mirror of pi/audiotarget/detectors/onnx.py).
  * Raw: (1, 4 + nc [+ mask coefs], N). End-to-end: (1, N, 6) = x1 y1 x2 y2 score class.
- * Returns [cx, cy, w, h, score] in network-input pixels, or null.
+ * Returns [cx, cy, w, h, score, classId] in network-input pixels, or null.
  */
 object YoloDecode {
     fun decode(data: FloatArray, shape: LongArray, classes: IntArray, conf: Float): FloatArray? {
@@ -33,7 +33,7 @@ object YoloDecode {
             if (best < 0) return null
             val o = best * 6
             val x1 = data[o]; val y1 = data[o + 1]; val x2 = data[o + 2]; val y2 = data[o + 3]
-            return floatArrayOf((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1, data[o + 4])
+            return floatArrayOf((x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1, data[o + 4], data[o + 5])
         }
         // Raw: channels-first (rows = 4 + nc..., cols = candidates)
         val rows = a
@@ -41,15 +41,19 @@ object YoloDecode {
         val classRows = classes.map { 4 + it }.filter { it < rows }
         if (classRows.isEmpty()) return null
         var bestI = -1
+        var bestR = -1
         var bestS = -1f
-        for (i in 0 until n) {
-            for (r in classRows) {
-                val s = data[r * n + i]
-                if (s > bestS) { bestS = s; bestI = i }
+        for (r in classRows) {
+            val base = r * n
+            for (i in 0 until n) {
+                val s = data[base + i]
+                if (s > bestS) { bestS = s; bestI = i; bestR = r }
             }
         }
         if (bestI < 0 || bestS < conf || bestS.isNaN()) return null
-        return floatArrayOf(data[bestI], data[n + bestI], data[2 * n + bestI], data[3 * n + bestI], bestS)
+        return floatArrayOf(
+            data[bestI], data[n + bestI], data[2 * n + bestI], data[3 * n + bestI], bestS, (bestR - 4).toFloat()
+        )
     }
 
     /** Count classes from Ultralytics' "names" metadata, e.g. "{0: 'bullseye', 1: 'x'}". */

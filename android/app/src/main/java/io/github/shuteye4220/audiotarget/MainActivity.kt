@@ -78,6 +78,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var targetAz = 0.0
     private var targetEl = 0.0
     private var lastFix = 0L
+    private var lastClass = -1
     private var zeroAz = 0.0
     private var zeroEl = 0.0
     private var pitchMdeg = 0.0
@@ -119,6 +120,22 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         bind(R.id.btn_conf) { cycle("conf", confs.size); detector?.conf = confs[idx("conf")]; say("Minimum score ${confs[idx("conf")]}") }
         bind(R.id.btn_status) { say(statusText()) }
         bind(R.id.btn_model) { pickModel.launch(arrayOf("application/octet-stream", "*/*")) }
+        bind(R.id.btn_lookfor) {
+            val opts = lookForOptions()
+            val next = opts[(opts.indexOf(lookForName()) + 1) % opts.size]
+            prefs.edit().putString("lookfor", next).apply()
+            applyLookFor()
+            say("Looking for $next")
+        }
+        bind(R.id.btn_modelsrc) {
+            if (!modelFile().exists()) {
+                say("No model file of your own yet. Use Load model.")
+            } else {
+                prefs.edit().putBoolean("custom", !prefs.getBoolean("custom", false))
+                    .putString("lookfor", ANYTHING).apply()
+                loadModel(initial = false)
+            }
+        }
         bind(R.id.btn_keys) {
             prefs.edit().putBoolean("volkeys", !prefs.getBoolean("volkeys", false)).apply()
             say(if (prefs.getBoolean("volkeys", false)) "Volume up zeroes, volume down says where the target is"
@@ -199,25 +216,36 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         label(R.id.btn_conf, "Minimum score: ${confs[idx("conf")]}")
         label(R.id.btn_keys, "Volume keys as buttons: ${if (prefs.getBoolean("volkeys", false)) "on" else "off"}")
         label(R.id.btn_announce, "Announcements: ${if (prefs.getBoolean("announce", true)) "on" else "off"}")
+        label(R.id.btn_lookfor, "Look for: ${lookForName()}")
+        label(R.id.btn_modelsrc, "Model: ${if (useCustom()) "your file" else "built-in objects"}")
     }
 
     private fun say(text: String) = announcer.say(text)
 
     // ------------------------------------------------------------------ model
     private fun modelFile() = File(filesDir, "targets.onnx")
+    private fun builtinFile() = File(filesDir, BUILTIN_ASSET)
+    private fun useCustom() = prefs.getBoolean("custom", false) && modelFile().exists()
+
+    /** Copy the built-in model out of the APK (again if the APK's copy changed). */
+    private fun extractBuiltin(): File? = try {
+        val f = builtinFile()
+        assets.openFd(BUILTIN_ASSET).use { fd ->
+            if (!f.exists() || f.length() != fd.length) {
+                assets.open(BUILTIN_ASSET).use { input -> f.outputStream().use { input.copyTo(it) } }
+            }
+        }
+        f
+    } catch (e: Exception) {
+        null
+    }
 
     private fun loadModel(initial: Boolean) {
         modelExecutor.execute {
-            val f = modelFile()
-            if (!f.exists()) {
-                try {
-                    assets.open("targets.onnx").use { input -> f.outputStream().use { input.copyTo(it) } }
-                } catch (e: Exception) {
-                    runOnUiThread {
-                        say("No target model loaded. Tilt guidance only. Use Load model to add one.")
-                    }
-                    return@execute
-                }
+            val f = if (useCustom()) modelFile() else extractBuiltin()
+            if (f == null) {
+                runOnUiThread { say("No target model in this build. Tilt guidance only. Use Load model to add one.") }
+                return@execute
             }
             val d = try {
                 OnnxDetector(f.path, useXnnpack = true)
@@ -237,10 +265,42 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             oldDetector?.close()
             runOnUiThread {
                 applyPace()
-                val names = if (d.classNames.isEmpty()) "" else ", looking for ${d.classNames.joinToString(", ")}"
-                say((if (initial) "AudioTarget ready" else "Model loaded") + names)
+                applyLookFor()
+                refreshLabels()
+                val which = if (useCustom()) "your model" else "built-in object model"
+                say((if (initial) "AudioTarget ready, " else "Loaded ") + which + ". Looking for ${lookForName()}.")
             }
         }
+    }
+
+    /** What the user can choose to look for with the current model. */
+    private fun lookForOptions(): List<String> {
+        val d = detector ?: return listOf(ANYTHING)
+        val names = d.classNames
+        return if (names.size == 80 && names.firstOrNull() == "person") {
+            listOf(ANYTHING) + COCO_CHOICES.filter { it in names }
+        } else {
+            listOf(ANYTHING) + names
+        }
+    }
+
+    private fun lookForName(): String {
+        val opts = lookForOptions()
+        val saved = prefs.getString("lookfor", ANYTHING) ?: ANYTHING
+        return if (saved in opts) saved else ANYTHING
+    }
+
+    private fun applyLookFor() {
+        val d = detector ?: return
+        val name = lookForName()
+        val i = d.classNames.indexOf(name)
+        d.classes = if (name == ANYTHING || i < 0) IntArray(d.classCount) { it } else intArrayOf(i)
+        tracker?.reset()
+    }
+
+    private fun className(id: Int): String {
+        val names = detector?.classNames ?: return "Target"
+        return names.getOrNull(id)?.replaceFirstChar { it.uppercase() } ?: "Target"
     }
 
     private fun importModel(uri: Uri) {
@@ -263,6 +323,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     }
                 } ?: error("unreadable")
                 check(tmp.renameTo(modelFile()))
+                prefs.edit().putBoolean("custom", true).putString("lookfor", ANYTHING).apply()
                 loadModel(initial = false)
             } catch (e: Exception) {
                 File(filesDir, "targets.onnx.tmp").delete()
@@ -349,6 +410,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     targetAz = Math.toDegrees(atan2(det.x - f.w / 2.0, fx)) * 1000
                     targetEl = Math.toDegrees(atan2(f.h / 2.0 - det.y, fx)) * 1000
                     lastFix = now
+                    lastClass = det.classId
                 }
             }
             updateTone()
@@ -431,7 +493,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }
             if (cam && !hadTarget) {
                 hadTarget = true
-                announce = "Target found"
+                announce = "${className(lastClass)} found"
             } else if (!cam && hadTarget) {
                 if (lostSince == 0L) lostSince = now
                 if (now - lostSince > 1000) {
@@ -460,7 +522,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun where() {
         val text = synchronized(lock) {
-            if (System.currentTimeMillis() - lastFix < 1000) describeTarget(targetAz, targetEl, null) else "No target"
+            if (System.currentTimeMillis() - lastFix < 1000) describeTarget(targetAz, targetEl, null, className(lastClass)) else "No target"
         }
         say(text)
     }
@@ -480,6 +542,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         if (t == null || d == null) {
             parts += "No model, tilt only"
         } else {
+            parts += "Looking for ${lookForName()}"
             parts += "Model input ${d.size}, %.0f milliseconds per detection, %.1f detections per second, %s"
                 .format(t.lastInferenceMs.toDouble(), t.runsPerSecond, paces[idx("pace")].first)
             parts += if (prefs.getBoolean("track", true)) "tracking between detections" else "no tracking"
@@ -489,6 +552,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     companion object {
         const val MAX_MODEL_BYTES = 200L * 1024 * 1024
+        const val BUILTIN_ASSET = "coco.onnx"
+        const val ANYTHING = "anything"
+
+        /** Everyday COCO objects that make sensible practice targets. */
+        val COCO_CHOICES = listOf(
+            "person", "chair", "couch", "bench", "potted plant", "bottle", "cup", "sports ball",
+            "backpack", "suitcase", "tv", "laptop", "teddy bear", "stop sign", "fire hydrant", "car",
+        )
     }
 }
 

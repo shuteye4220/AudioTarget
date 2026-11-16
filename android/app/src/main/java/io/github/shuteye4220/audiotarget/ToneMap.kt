@@ -60,13 +60,13 @@ object ToneMap {
 }
 
 /** Where the target is, in words. */
-fun describeTarget(azMdeg: Double, elMdeg: Double, rangeM: Double?): String {
+fun describeTarget(azMdeg: Double, elMdeg: Double, rangeM: Double?, what: String = "Target"): String {
     fun part(v: Double, pos: String, neg: String, zero: String): String {
         val d = abs(v) / 1000.0
         if (d < 0.05) return zero
         return "%.1f degrees %s".format(d, if (v > 0) pos else neg)
     }
-    var s = "Target ${part(azMdeg, "right", "left", "centred")}, ${part(elMdeg, "up", "down", "level")}"
+    var s = "$what ${part(azMdeg, "right", "left", "centred")}, ${part(elMdeg, "up", "down", "level")}"
     if (rangeM != null) s += ", %.0f metres".format(rangeM)
     return s
 }
