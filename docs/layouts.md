@@ -25,7 +25,7 @@ module also works alone, with no Pi or camera, for tilt-only guidance.
 
 | Qty | Part | Notes |
 |---|---|---|
-| 1 | Seeed Studio XIAO nRF52840 **Sense** | Must be the Sense version: it has the motion sensor |
+| 1 | Seeed Studio XIAO nRF52840 **Sense** or **Sense Plus** | Must be a Sense: it has the motion sensor. The Sense Plus adds 9 extra solder pads, ships without pin headers, and runs the same firmware file |
 | 1 | LiPo cell, 3.7 V, 300 to 500 mAh, about 35 x 20 x 5 mm (502035 size) | Solders to the XIAO's battery pads; charges over USB-C |
 | 1 | Mini slide switch (SS12D00 style) | In the battery + lead |
 | 2 | 12 x 12 mm tactile switches | One with a **round** cap (ZERO), one with a **square** cap (MODE) |
