@@ -103,6 +103,13 @@ you export is covered by that, not by this repo's MIT license, so it isn't
 shipped in the SD-card image. AudioTarget only loads the exported `.onnx` file;
 it doesn't use the Ultralytics library on the Pi.
 
+## Try it on a phone first
+
+`android/` is a prototype app that runs the same model and the same "detect
+slowly, track quickly" design with a phone's camera, and plays the same
+guidance tones. It can imitate Pi 5 and Pi Zero 2 W detection rates. See
+`android/README.md`.
+
 ## Next steps worth doing
 
 - **Teach it your own targets:** add a menu item that saves camera frames while
