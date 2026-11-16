@@ -97,9 +97,10 @@ jobs:
           gradle-version: "8.11.1"
       - name: Test and build
         run: |
-          gradle --no-daemon -p android testReleaseUnitTest assembleRelease
+          gradle --no-daemon -p android -Pabis=arm64-v8a testReleaseUnitTest assembleRelease
           cp android/app/build/outputs/apk/release/app-release.apk audiotarget-phone.apk
           sha256sum audiotarget-phone.apk | tee audiotarget-phone.apk.sha256
+          ls -la audiotarget-phone.apk
       - name: Publish to the android-latest release
         env:
           GH_TOKEN: ${{ github.token }}

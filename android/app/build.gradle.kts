@@ -14,10 +14,13 @@ android {
         versionCode = 3
         versionName = "0.3-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // 64-bit phones (and 32-bit ARM for older budget models), plus x86_64 for
-        // the CI emulators. Leaving out 32-bit x86 keeps the APK smaller.
+        // Processor types to include. Phones from the last several years are all
+        // arm64-v8a; x86_64 is for the CI emulators. The published APK is built
+        // with -Pabis=arm64-v8a to keep the download small; add armeabi-v7a for
+        // very old 32-bit phones.
+        val abis = (project.findProperty("abis") as String?)?.split(",") ?: listOf("arm64-v8a", "x86_64")
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += abis
         }
     }
 
@@ -51,6 +54,13 @@ android {
     }
     androidResources {
         noCompress += "onnx"
+    }
+    packaging {
+        // Compress OpenCV / ONNX Runtime inside the APK: a much smaller download,
+        // unpacked once at install.
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
