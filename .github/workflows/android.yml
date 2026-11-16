@@ -75,6 +75,8 @@ jobs:
           arch: x86_64
           target: ${{ matrix.api >= 34 && 'google_apis' || 'default' }}
           disable-animations: true
+          heap-size: 256M   # a realistic phone; the emulator default is 16 MB
+          ram-size: 3072M
           script: gradle --no-daemon -p android connectedDebugAndroidTest
 
   apk:

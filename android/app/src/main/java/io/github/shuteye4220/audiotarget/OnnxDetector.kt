@@ -29,6 +29,7 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
     private var tries = 0
     private val input: FloatBuffer
     private lateinit var plane: FloatArray
+    private var outBuf = FloatArray(0)  // model output, reused between detections
 
     init {
         val opts = OrtSession.SessionOptions()
@@ -86,9 +87,10 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
             session.run(mapOf(inputName to t)).use { res ->
                 val out = res.get(0) as OnnxTensor
                 val fb = out.floatBuffer
-                val data = FloatArray(fb.remaining())
-                fb.get(data)
-                YoloDecode.decode(data, out.info.shape, classes, conf)
+                val n = fb.remaining()
+                if (outBuf.size != n) outBuf = FloatArray(n)
+                fb.get(outBuf, 0, n)
+                YoloDecode.decode(outBuf, out.info.shape, classes, conf)
             }
         } ?: return null
 
