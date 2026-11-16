@@ -173,3 +173,34 @@ class TrackingTest {
         assertTrue("max error $maxErr", maxErr < 1.5)
     }
 }
+
+class CardGeometryTest {
+    @Test fun zones() {
+        val c = CardGeometry.SIZE_MM / 2
+        assertEquals("bull's eye", CardGeometry.zone(c + 3, c - 4))
+        assertEquals("first ring, high", CardGeometry.zone(c, c - 15))       // card y runs down
+        assertEquals("second ring, low left", CardGeometry.zone(c - 20, c + 20))
+        assertEquals("fourth ring, right", CardGeometry.zone(c + 55, c + 5))
+        assertEquals("on the card, outside the rings, high left", CardGeometry.zone(20.0, 20.0))
+        assertEquals("off the card, low", CardGeometry.zone(c, 260.0))
+    }
+
+    @Test fun cornersMatchThePrintedCard() {
+        // Top-left marker of the Letter PDF: 8 mm in from the card corner, 40 mm square.
+        assertEquals(listOf(8.0 to 8.0, 48.0 to 8.0, 48.0 to 48.0, 8.0 to 48.0), CardGeometry.markerCorners(0))
+        assertEquals(152.0 to 152.0, CardGeometry.markerCorners(2)[0])
+    }
+
+    @Test fun homographyRoundTrip() {
+        // Card millimetres -> pixels: scale 3, a little perspective, shifted.
+        val h = doubleArrayOf(3.0, 0.2, 400.0, -0.1, 2.9, 150.0, 0.0002, 0.0001, 1.0)
+        val inv = CardGeometry.invert(h)!!
+        for ((x, y) in listOf(100.0 to 100.0, 0.0 to 0.0, 200.0 to 37.5)) {
+            val p = CardGeometry.apply(h, x, y)!!
+            val back = CardGeometry.apply(inv, p.first, p.second)!!
+            assertEquals(x, back.first, 1e-6)
+            assertEquals(y, back.second, 1e-6)
+        }
+        assertNull(CardGeometry.invert(DoubleArray(9)))
+    }
+}

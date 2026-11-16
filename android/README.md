@@ -37,8 +37,32 @@ something to reuse for an app you'd publish.
 
 ## What it looks for
 
-The APK has a **built-in object model** (YOLO26n, trained on COCO, a set of 80
-everyday object types). Use **Look for** to pick: anything, a person, chair,
+**The printed card first.** Print `targets/audiotarget-card-letter.pdf` (or the
+A4 one). When the card is in view, the app finds it from its four corner
+markers. That's more precise than object detection, and it knows the distance.
+When the card isn't in view, the object model takes over.
+
+**Ring callouts:** on the card, the app works out where your aim point falls
+on the paper and says the area:
+
+- bull's eye: within 12 mm of the centre
+- first, second, third and fourth ring: each 12 mm wide, going outward
+- on the card, outside the rings
+- off the card
+
+Each comes with a direction from the centre, for example "second ring, high
+left". The aim point is the middle of the picture until you zero, and wherever
+the card's centre was when you pressed Zero after that. A callout comes when
+the area changes and holds for a moment. "Where is the target" adds the
+distance and the area, for example "Card 0.4 degrees right, level, 6 metres.
+Aim point: first ring, right". The "Ring callouts" button turns them off.
+
+For range, use Zoom 5x: the corner markers need to be about 15 pixels across
+or more, which on the Pixel 10's telephoto is roughly 10 to 12 m.
+
+**Everyday objects too.** The APK also has a **built-in object model** (YOLO26n, trained on COCO, a set of 80
+everyday object types). **Look for** chooses "the card, or anything" (the default), "the card only",
+or, for objects only: anything, a person, chair,
 couch, bench, potted plant, bottle, cup, sports ball, backpack, suitcase, TV,
 laptop, teddy bear, stop sign, fire hydrant or car. Big, plain objects like
 chairs and suitcases make good practice targets. The model has no "head"
@@ -78,7 +102,8 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Zero | Saves the current target position (and tilt) as "on target" |
 | Where is the target | Says what and where, for example "Chair 1.2 degrees right, level" |
 | Mute / Unmute | Silences the guidance tone |
-| Look for | Anything, or one kind of object |
+| Look for | The card or anything, the card only, anything, or one kind of object |
+| Ring callouts | Say which ring the aim point is in (card only) |
 | Zoom | 1x, 2x, 5x (the Pixel 10's telephoto lens), 10x. Narrower zoom = longer range |
 | Model speed | Phone speed / like a Pi 5 (10 a second) / like a Pi Zero 2 W (1 a second) |
 | Tracking between detections | On: correlation tracking fills every frame. Off: model answers only |

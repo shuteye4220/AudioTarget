@@ -11,9 +11,14 @@ android {
         applicationId = "io.github.shuteye4220.audiotarget"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2-prototype"
+        versionCode = 3
+        versionName = "0.3-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 64-bit phones (and 32-bit ARM for older budget models), plus x86_64 for
+        // the CI emulators. Leaving out 32-bit x86 keeps the APK smaller.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     // One fixed key for every build, so a newer APK installs over an older one.
@@ -59,6 +64,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     // No Google Play services anywhere, so it runs on GrapheneOS as-is.
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    // ArUco markers on the printed card (same decoder the Pi uses).
+    implementation("org.opencv:opencv:4.10.0")
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test:runner:1.6.2")

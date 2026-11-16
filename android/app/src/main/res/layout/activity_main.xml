@@ -57,6 +57,7 @@
             <Button android:id="@+id/btn_detail" style="@style/BigButton" />
             <Button android:id="@+id/btn_keys" style="@style/BigButton" />
             <Button android:id="@+id/btn_announce" style="@style/BigButton" />
+            <Button android:id="@+id/btn_rings" style="@style/BigButton" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

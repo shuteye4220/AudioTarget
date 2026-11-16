@@ -63,6 +63,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     @Volatile private var detector: OnnxDetector? = null
     @Volatile private var tracker: MlTracker? = null
     @Volatile private var speedChecked = false
+    @Volatile private var card: CardDetector? = null
+    @Volatile private var cardFailed = false
 
     /** For the instrumented smoke test. */
     fun modelReady(): Boolean = detector != null
@@ -89,6 +91,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var spokenClass = -1       // the object we last told the user about
     private var pendingClass = -1      // a different object, waiting to be confirmed
     private var pendingSince = 0L
+    private var zoneNow: String? = null       // card area under the aim point
+    private var spokenZone: String? = null
+    private var pendingZone: String? = null
+    private var pendingZoneSince = 0L
+    private var cardRangeM: Double? = null
     private var zeroAz = 0.0
     private var zeroEl = 0.0
     private var pitchMdeg = 0.0
@@ -151,7 +158,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 say("No model file of your own yet. Use Load model.")
             } else {
                 prefs.edit().putBoolean("custom", !prefs.getBoolean("custom", false))
-                    .putString("lookfor", ANYTHING).apply()
+                    .putString("lookfor", CARD_OR_ANY).apply()
                 loadModel(initial = false)
             }
         }
@@ -167,6 +174,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             speedChecked = false
             say("Detail $next")
             if (!useCustom()) loadModel(initial = false)
+        }
+        bind(R.id.btn_rings) {
+            prefs.edit().putBoolean("rings", !prefs.getBoolean("rings", true)).apply()
+            say(if (prefs.getBoolean("rings", true)) "Ring callouts on" else "Ring callouts off")
         }
         bind(R.id.btn_announce) {
             prefs.edit().putBoolean("announce", !prefs.getBoolean("announce", true)).apply()
@@ -248,6 +259,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         label(R.id.btn_keys, "Volume keys as buttons: ${if (prefs.getBoolean("volkeys", false)) "on" else "off"}")
         label(R.id.btn_announce, "Announcements: ${if (prefs.getBoolean("announce", true)) "on" else "off"}")
         label(R.id.btn_lookfor, "Look for: ${lookForName()}")
+        label(R.id.btn_rings, "Ring callouts: ${if (prefs.getBoolean("rings", true)) "on" else "off"}")
         label(R.id.btn_detail, "Detail: " + when (detail()) {
             "high" -> "high"
             "fast" -> "fast"
@@ -334,9 +346,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     /** What the user can choose to look for with the current model. */
     private fun lookForOptions(): List<String> {
-        val d = detector ?: return listOf(ANYTHING)
+        val cardOpts = listOf(CARD_OR_ANY, CARD_ONLY)
+        val d = detector ?: return cardOpts
         val names = d.classNames
-        return if (names.size == 80 && names.firstOrNull() == "person") {
+        return cardOpts + if (names.size == 80 && names.firstOrNull() == "person") {
             listOf(ANYTHING) + COCO_CHOICES.filter { it in names }
         } else {
             listOf(ANYTHING) + names
@@ -345,19 +358,21 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun lookForName(): String {
         val opts = lookForOptions()
-        val saved = prefs.getString("lookfor", ANYTHING) ?: ANYTHING
-        return if (saved in opts) saved else ANYTHING
+        val saved = prefs.getString("lookfor", CARD_OR_ANY) ?: CARD_OR_ANY
+        return if (saved in opts) saved else CARD_OR_ANY
     }
 
     private fun applyLookFor() {
         val d = detector ?: return
         val name = lookForName()
         val i = d.classNames.indexOf(name)
-        d.classes = if (name == ANYTHING || i < 0) IntArray(d.classCount) { it } else intArrayOf(i)
+        d.classes = if (i < 0) IntArray(d.classCount) { it } else intArrayOf(i)
+        card?.reset()
         tracker?.reset()
     }
 
     private fun className(id: Int): String {
+        if (id == CardDetector.CARD_CLASS) return "Card"
         val names = detector?.classNames ?: return "Target"
         return names.getOrNull(id)?.replaceFirstChar { it.uppercase() } ?: "Target"
     }
@@ -382,7 +397,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     }
                 } ?: error("unreadable")
                 check(tmp.renameTo(modelFile()))
-                prefs.edit().putBoolean("custom", true).putString("lookfor", ANYTHING).apply()
+                prefs.edit().putBoolean("custom", true).putString("lookfor", CARD_OR_ANY).apply()
                 loadModel(initial = false)
             } catch (e: Exception) {
                 File(filesDir, "targets.onnx.tmp").delete()
@@ -454,8 +469,26 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         try {
             val f = toUprightGrey(img)
             val now = System.currentTimeMillis()
-            val det = tracker?.process(f, now)
-            checkSpeed()
+            val lf = lookForName()
+            val wantCard = lf == CARD_OR_ANY || lf == CARD_ONLY
+            if (wantCard && card == null && !cardFailed) {
+                card = try { CardDetector() } catch (e: Throwable) {
+                    cardFailed = true
+                    runOnUiThread { say("Card detection isn't available on this phone.") }
+                    null
+                }
+            }
+            val det: Detection? = run {
+                val c = if (wantCard) card?.detect(f) else null
+                if (c != null) {
+                    tracker?.reset() // the card is better: let the model rest
+                    c
+                } else if (lf != CARD_ONLY) {
+                    tracker?.process(f, now).also { checkSpeed() }
+                } else {
+                    null
+                }
+            }
             val zoomNow = camera?.cameraInfo?.zoomState?.value?.zoomRatio?.toDouble() ?: 1.0
             synchronized(lock) {
                 frameW = f.w; frameH = f.h
@@ -471,6 +504,19 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     targetEl = Math.toDegrees(atan2(f.h / 2.0 - det.y, fx)) * 1000
                     lastFix = now
                     lastClass = det.classId
+                    val h = det.cardH
+                    if (h != null) {
+                        // Where on the card does the aim point (the zero, or the
+                        // middle of the picture before zeroing) fall?
+                        val ax = f.w / 2.0 + fx * tan(Math.toRadians(zeroAz / 1000))
+                        val ay = f.h / 2.0 - fx * tan(Math.toRadians(zeroEl / 1000))
+                        val mm = CardGeometry.invert(h)?.let { CardGeometry.apply(it, ax, ay) }
+                        zoneNow = mm?.let { CardGeometry.zone(it.first, it.second) }
+                        cardRangeM = fx * CardGeometry.SIZE_MM / det.size / 1000
+                    } else {
+                        zoneNow = null
+                        cardRangeM = null
+                    }
                 }
             }
             updateTone()
@@ -558,11 +604,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 val p0 = if (tiltZeroed) pitch0 else 0.0
                 ToneMap.compute(cfg, (pitchMdeg - p0).toInt(), 0, false, lost, cantMdeg())
             }
+            val zones = prefs.getBoolean("rings", true)
             if (cam && !hadTarget) {
                 hadTarget = true
                 spokenClass = lastClass
                 pendingClass = -1
-                announce = "${className(lastClass)} found"
+                spokenZone = zoneNow
+                pendingZone = null
+                announce = "${className(lastClass)} found" + if (zones && zoneNow != null) ", $zoneNow" else ""
             } else if (cam && lastClass != spokenClass) {
                 // Locked onto a different kind of object: say so once it has held
                 // for a moment, so a single doubtful detection doesn't chatter.
@@ -582,6 +631,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 }
             }
             if (cam) lostSince = 0L
+            // Card area under the aim point: say it when it changes and holds briefly.
+            val z = zoneNow
+            if (zones && cam && announce == null && z != null && z != spokenZone) {
+                if (z != pendingZone) {
+                    pendingZone = z
+                    pendingZoneSince = now
+                } else if (now - pendingZoneSince > ZONE_CONFIRM_MS) {
+                    spokenZone = z
+                    pendingZone = null
+                    announce = z.replaceFirstChar { it.uppercase() }
+                }
+            }
         }
         tone.tone = if (muted) Tone.SILENT else t
         val msg = announce
@@ -603,7 +664,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun where() {
         val text = synchronized(lock) {
-            if (System.currentTimeMillis() - lastFix < 1000) describeTarget(targetAz, targetEl, null, className(lastClass)) else "No target"
+            if (System.currentTimeMillis() - lastFix >= 1000) "No target"
+            else describeTarget(targetAz, targetEl, cardRangeM, className(lastClass)) +
+                (zoneNow?.let { ". Aim point: $it" } ?: "")
         }
         say(text)
     }
@@ -638,6 +701,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         const val SLOW_MS = 250L                    // median ms per detection that counts as slow
         const val CLASS_CONFIRM_MS = 700L
         const val ANYTHING = "anything"
+        const val CARD_OR_ANY = "the card, or anything"
+        const val CARD_ONLY = "the card only"
+        const val ZONE_CONFIRM_MS = 400L
 
         /** Everyday COCO objects that make sensible practice targets. */
         val COCO_CHOICES = listOf(

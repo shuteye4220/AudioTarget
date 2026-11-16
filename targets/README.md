@@ -17,3 +17,14 @@ Pi's default settings and the phone app both expect exactly this card.
    square. Glue it to cardboard so it stays flat. Matte paper reflects less glare.
 
 To make other sizes: `python3 pi/tools/make_card.py --help`.
+
+## Rings
+
+The bullseye is 120 mm across: five black and five white bands, each 6 mm.
+The phone app (and later the Pi) count them in pairs from the centre:
+
+- bull's eye: within 12 mm of the centre
+- first ring: 12 to 24 mm out
+- second ring: 24 to 36 mm out
+- third ring: 36 to 48 mm out
+- fourth ring: 48 to 60 mm out

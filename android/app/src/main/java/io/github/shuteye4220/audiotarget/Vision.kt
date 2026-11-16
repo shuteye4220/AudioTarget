@@ -10,8 +10,18 @@ class Frame(val data: ByteArray, val w: Int, val h: Int) {
     fun at(x: Int, y: Int): Int = data[y * w + x].toInt() and 0xFF
 }
 
-/** Aim point in full-frame pixels, and what kind of thing it is (class id, -1 if unknown). */
-data class Detection(val x: Double, val y: Double, val size: Double, val score: Double, val classId: Int = -1)
+/**
+ * Aim point in full-frame pixels, and what kind of thing it is (class id, -1 if
+ * unknown). For the printed card, [cardH] maps card millimetres to pixels.
+ */
+data class Detection(
+    val x: Double,
+    val y: Double,
+    val size: Double,
+    val score: Double,
+    val classId: Int = -1,
+    val cardH: DoubleArray? = null,
+)
 
 /**
  * YOLO output decoding (mirror of pi/audiotarget/detectors/onnx.py).
