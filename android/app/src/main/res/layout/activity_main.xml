@@ -37,6 +37,7 @@
 
         <LinearLayout style="@style/Row">
             <Button android:id="@+id/btn_lookfor" style="@style/BigButton" />
+            <Button android:id="@+id/btn_camera" style="@style/BigButton" />
             <Button android:id="@+id/btn_zoom" style="@style/BigButton" />
             <Button android:id="@+id/btn_pace" style="@style/BigButton" />
         </LinearLayout>

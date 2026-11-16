@@ -13,6 +13,10 @@ module:
 - **Fast flutter** = the phone is tipped sideways more than 2 degrees from
   where you zeroed.
 
+Pitch and ear balance work like the gun module: higher pitch means you're
+aiming high, and the louder ear is the side the target is on. That needs stereo
+earphones; bone-conduction headsets like the Suunto Wing are stereo.
+
 It runs the same "detect slowly, track quickly" design as the Pi. Set
 "Model speed" to "like a Pi 5" or "like a Pi Zero 2 W" to hear how a slower
 board would feel. Turn "Tracking between detections" off to hear the
@@ -104,6 +108,7 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Mute / Unmute | Silences the guidance tone |
 | Look for | The card or anything, the card only, anything, or one kind of object |
 | Ring callouts | Say which ring the aim point is in (card only) |
+| Camera | "USB if plugged in" (the default) or "phone" only |
 | Zoom | 1x, 2x, 5x (the Pixel 10's telephoto lens), 10x. Narrower zoom = longer range |
 | Model speed | Phone speed / like a Pi 5 (10 a second) / like a Pi Zero 2 W (1 a second) |
 | Tracking between detections | On: correlation tracking fills every frame. Off: model answers only |
@@ -119,6 +124,20 @@ Hold the phone in landscape, camera facing the target, like a scope.
 With a screen reader running (Backtalk, TalkBack), announcements go through
 the screen reader, in its own voice and at its own rate. Without one, the app
 uses text-to-speech.
+
+## USB cameras
+
+With Camera on "USB if plugged in", the app switches to a USB camera as soon as
+Android offers one to apps, and back to the phone's camera when it's unplugged.
+It says which it's using. That suits a camera on the gun with the phone in your
+pocket. In that setup the phone's own tilt says nothing about your aim, so tilt
+guidance and the sideways-tilt flutter are off while the USB camera is in use.
+
+**The catch:** Android only offers USB cameras to apps on phones whose makers
+switched that on, and most phones haven't. Press Status: it says whether this
+phone supports USB cameras. If yours doesn't, a USB camera would need the app
+to carry its own USB camera driver (a UVC library). That's possible, but it's
+a bigger job and works on some phones and not others.
 
 ## Other phones (Samsung and others)
 

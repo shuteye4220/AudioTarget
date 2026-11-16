@@ -24,6 +24,7 @@ import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.Camera
+import androidx.camera.core.ExperimentalLensFacing
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
@@ -111,6 +112,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     @Volatile private var muted = false
     @Volatile private var displayRotation = Surface.ROTATION_90
+    @Volatile private var usingUsb = false
 
     private val pickModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importModel(uri)
@@ -135,6 +137,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         bind(R.id.btn_zero) { zero() }
         bind(R.id.btn_where) { where() }
         bind(R.id.btn_mute) { toggleMute() }
+        bind(R.id.btn_camera) {
+            val next = if (prefs.getString("cam", "auto") == "auto") "phone" else "auto"
+            prefs.edit().putString("cam", next).apply()
+            when {
+                next == "phone" -> say("Phone camera only")
+                externalIds().isNotEmpty() -> say("USB camera when plugged in")
+                phoneSupportsUsbCameras() -> say("USB camera when plugged in. None found yet.")
+                else -> say("USB camera when plugged in, but this phone doesn't offer USB cameras to apps.")
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
+        }
         bind(R.id.btn_zoom) { cycle("zoom", zooms.size); applyZoom(); say("Zoom ${zoomName()}") }
         bind(R.id.btn_pace) { cycle("pace", paces.size); applyPace(); say("Model speed ${paces[idx("pace")].first}") }
         bind(R.id.btn_track) {
@@ -208,12 +221,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         gravity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         displayRotation = if (Build.VERSION.SDK_INT >= 30) display?.rotation ?: Surface.ROTATION_90
             else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
+        cameraManager.registerAvailabilityCallback(cameraWatch, null)
         tone.start()
     }
 
     override fun onPause() {
         super.onPause()
         getSystemService(SensorManager::class.java).unregisterListener(this)
+        cameraManager.unregisterAvailabilityCallback(cameraWatch)
         tone.stop() // silence when you leave the app
     }
 
@@ -259,6 +274,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         label(R.id.btn_keys, "Volume keys as buttons: ${if (prefs.getBoolean("volkeys", false)) "on" else "off"}")
         label(R.id.btn_announce, "Announcements: ${if (prefs.getBoolean("announce", true)) "on" else "off"}")
         label(R.id.btn_lookfor, "Look for: ${lookForName()}")
+        label(R.id.btn_camera, "Camera: " + when {
+            prefs.getString("cam", "auto") == "phone" -> "phone"
+            usingUsb -> "USB, in use"
+            else -> "USB if plugged in"
+        })
         label(R.id.btn_rings, "Ring callouts: ${if (prefs.getBoolean("rings", true)) "on" else "off"}")
         label(R.id.btn_detail, "Detail: " + when (detail()) {
             "high" -> "high"
@@ -414,11 +434,50 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     // ------------------------------------------------------------------ camera
+    private val cameraManager by lazy { getSystemService(CameraManager::class.java) }
+    private var externalPresent = false
+
+    /** USB cameras come and go: rebind when one appears or disappears. */
+    private val cameraWatch = object : CameraManager.AvailabilityCallback() {
+        override fun onCameraAvailable(id: String) = recheckExternal()
+        override fun onCameraUnavailable(id: String) = recheckExternal()
+    }
+
+    private fun externalIds(): List<String> = try {
+        cameraManager.cameraIdList.filter {
+            cameraManager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) ==
+                CameraCharacteristics.LENS_FACING_EXTERNAL
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    private fun recheckExternal() {
+        val now = externalIds().isNotEmpty()
+        if (now != externalPresent) {
+            externalPresent = now
+            if (prefs.getString("cam", "auto") == "auto" &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            ) startCamera()
+        }
+    }
+
+    private fun phoneSupportsUsbCameras() = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_EXTERNAL)
+
+    @androidx.annotation.OptIn(markerClass = [ExperimentalLensFacing::class])
+    private fun externalSelector(): CameraSelector =
+        CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_EXTERNAL).build()
+
     private fun startCamera() {
-        hfovDeg = mainCameraHfov() ?: 70.0
+        externalPresent = externalIds().isNotEmpty()
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val provider = future.get()
+            val wantUsb = prefs.getString("cam", "auto") == "auto"
+            val usb = wantUsb && try { provider.hasCamera(externalSelector()) } catch (e: Exception) { false }
+            val cameraSel = if (usb) externalSelector() else CameraSelector.DEFAULT_BACK_CAMERA
+            hfovDeg = (if (usb) externalHfov() else mainCameraHfov()) ?: if (usb) 60.0 else 70.0
+
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(findViewById<PreviewView>(R.id.preview).surfaceProvider)
             }
@@ -432,28 +491,54 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                 .build()
             analysis.setAnalyzer(cameraExecutor) { img -> analyze(img) }
-            try {
-                provider.unbindAll()
-                camera = provider.bindToLifecycle(this, CameraSelector.DEFAULT_BACK_CAMERA, preview, analysis)
-                applyZoom()
+            provider.unbindAll()
+            camera = try {
+                provider.bindToLifecycle(this, cameraSel, preview, analysis)
             } catch (e: Exception) {
-                say("Couldn't start the camera.")
+                // Many USB cameras can't feed a preview and analysis at once: analysis only.
+                try {
+                    provider.unbindAll()
+                    provider.bindToLifecycle(this, cameraSel, analysis)
+                } catch (e2: Exception) {
+                    null
+                }
             }
+            if (camera == null) {
+                say(if (usb) "Couldn't start the USB camera." else "Couldn't start the camera.")
+                if (usb) { prefs.edit().putString("cam", "phone").apply(); refreshLabels(); startCamera() }
+                return@addListener
+            }
+            val changed = usb != usingUsb
+            usingUsb = usb
+            synchronized(lock) { lastFix = 0 }
+            tracker?.reset()
+            card?.reset()
+            applyZoom()
+            refreshLabels()
+            if (changed) say(if (usb) "Using the USB camera" else "Using the phone camera")
         }, ContextCompat.getMainExecutor(this))
     }
 
-    private fun mainCameraHfov(): Double? = try {
-        val cm = getSystemService(CameraManager::class.java)
-        val id = cm.cameraIdList.first {
-            cm.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-        }
-        val ch = cm.getCameraCharacteristics(id)
+    private fun hfovOf(id: String): Double? = try {
+        val ch = cameraManager.getCameraCharacteristics(id)
         val w = ch.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)!!.width.toDouble()
         val f = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)!!.first().toDouble()
-        Math.toDegrees(2 * atan(w / (2 * f)))
+        Math.toDegrees(2 * atan(w / (2 * f))).takeIf { it in 5.0..170.0 }
     } catch (e: Exception) {
         null
     }
+
+    private fun mainCameraHfov(): Double? = try {
+        hfovOf(cameraManager.cameraIdList.first {
+            cameraManager.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) ==
+                CameraCharacteristics.LENS_FACING_BACK
+        })
+    } catch (e: Exception) {
+        null
+    }
+
+    /** USB cameras often don't report their optics; then a typical 60 degrees is assumed. */
+    private fun externalHfov(): Double? = externalIds().firstOrNull()?.let { hfovOf(it) }
 
     private fun applyZoom() {
         val cam = camera ?: return
@@ -536,7 +621,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             src.position(y * rs)
             src.get(buf, y * w, w)
         }
-        return when (img.imageInfo.rotationDegrees) {
+        return when (if (usingUsb) 0 else img.imageInfo.rotationDegrees) {
             90 -> Frame(rotate(buf, w, h, 90), h, w)
             180 -> Frame(rotate(buf, w, h, 180), w, h)
             270 -> Frame(rotate(buf, w, h, 270), h, w)
@@ -599,10 +684,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             val cfg = ToneCfg(mdegPerSemitone = steps[idx("step")])
             val lost = tracker != null && !cam
             t = if (cam) {
-                ToneMap.compute(cfg, (zeroEl - targetEl).toInt(), (zeroAz - targetAz).toInt(), true, false, cantMdeg())
+                ToneMap.compute(cfg, (zeroEl - targetEl).toInt(), (zeroAz - targetAz).toInt(), true, false,
+                    if (usingUsb) 0 else cantMdeg())
             } else {
                 val p0 = if (tiltZeroed) pitch0 else 0.0
-                ToneMap.compute(cfg, (pitchMdeg - p0).toInt(), 0, false, lost, cantMdeg())
+                // With a USB camera the phone's own tilt says nothing about aim:
+                // just the "lost" beeps, at the on-target note.
+                if (usingUsb) ToneMap.compute(cfg, 0, 0, false, lost, 0)
+                else ToneMap.compute(cfg, (pitchMdeg - p0).toInt(), 0, false, lost, cantMdeg())
             }
             val zones = prefs.getBoolean("rings", true)
             if (cam && !hadTarget) {
@@ -681,6 +770,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val t = tracker
         val d = detector
         val parts = mutableListOf<String>()
+        parts += (if (usingUsb) "USB camera" else "Phone camera") +
+            if (phoneSupportsUsbCameras()) ", this phone supports USB cameras" else ", this phone doesn't offer USB cameras to apps"
         parts += "Camera %.0f frames per second, zoom %s, field of view %.0f degrees".format(
             fps, zoomName(), hfovDeg / zooms[idx("zoom")])
         if (t == null || d == null) {

@@ -14,7 +14,7 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * The printed AudioTarget card (targets/*.pdf): four ArUco markers, IDs 0-3,
+ * The printed AudioTarget card (the PDFs in targets/): four ArUco markers, IDs 0-3,
  * in the corners. Same geometry as the Pi (pi/audiotarget/card.py). Pure
  * Kotlin, so it can be unit tested without OpenCV.
  */
