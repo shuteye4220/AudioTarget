@@ -32,6 +32,7 @@ Pi's Bluetooth audio, or both.
 | `image/` | Builds the flashable Pi SD-card image (also installs onto an existing Pi) |
 | `hardware/` | OpenSCAD sources and ready STL files for 3D printing |
 | `android/` | Phone prototype of the camera + ML tracking, with the same guidance tones |
+| `targets/` | Printable target card PDFs (Letter and A4) |
 | `docs/` | Layouts and parts, wiring, buttons and sounds, protocol, range, Pi image, ML |
 
 ## Layouts and parts

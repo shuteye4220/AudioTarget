@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Generate a printable target card (SVG, true millimetre scale).
+"""Generate a printable target card (SVG or PDF, true millimetre scale).
 
 Four ArUco markers in the corners for the camera, a bullseye in the middle.
 The defaults fit on Letter or A4; print at 100% / "actual size" and check the
 100 mm scale bar with a ruler.
 
-    python3 tools/make_card.py -o card.svg
+    python3 tools/make_card.py -o card.pdf                 # PDF needs: pip install cairosvg
+    python3 tools/make_card.py --page a4 -o card-a4.pdf
     python3 tools/make_card.py --size 300 --marker 60 --page tabloid -o big.svg
 """
 
@@ -39,8 +40,8 @@ def svg_marker(marker_id: int, x: float, y: float, size: float) -> str:
 
 def build(layout: CardLayout, page: tuple[float, float], bullseye_mm: float) -> str:
     pw, ph = page
-    ox, oy = (pw - layout.size_mm) / 2.0, 15.0
-    if layout.size_mm > pw - 10 or layout.size_mm + 40 > ph:
+    ox, oy = (pw - layout.size_mm) / 2.0, 22.0
+    if layout.size_mm > pw - 10 or layout.size_mm + 70 > ph:
         raise SystemExit("card doesn't fit on that page; pick a bigger page or smaller --size")
     cx, cy = layout.centre
     max_r = math.sqrt(2) * (layout.size_mm / 2 - layout.margin_mm - layout.marker_mm) - 2
@@ -50,6 +51,8 @@ def build(layout: CardLayout, page: tuple[float, float], bullseye_mm: float) -> 
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{pw}mm" height="{ph}mm" '
         f'viewBox="0 0 {pw} {ph}">',
         f'<rect width="{pw}" height="{ph}" fill="#fff"/>',
+        f'<text x="{pw / 2}" y="14" font-family="sans-serif" font-size="6" text-anchor="middle">'
+        f'AudioTarget card: cut along the dashed line</text>',
         f'<g transform="translate({ox:.3f},{oy:.3f})">',
         f'<rect x="0" y="0" width="{layout.size_mm}" height="{layout.size_mm}" fill="#fff" '
         f'stroke="#888" stroke-width="0.2" stroke-dasharray="2,2"/>',
@@ -66,14 +69,18 @@ def build(layout: CardLayout, page: tuple[float, float], bullseye_mm: float) -> 
     parts.append(f'<circle cx="{cx}" cy="{cy}" r="1.2" fill="#fff"/>')
     parts.append("</g>")
 
-    # Scale check and label below the card.
+    # Scale check and notes below the card.
     by = oy + layout.size_mm + 10
     parts.append(f'<rect x="{ox}" y="{by}" width="100" height="2" fill="#000"/>')
-    parts.append(f'<text x="{ox}" y="{by + 7}" font-family="sans-serif" font-size="4">'
-                 f'Scale check: this bar must measure 100 mm</text>')
-    parts.append(f'<text x="{ox}" y="{by + 13}" font-family="sans-serif" font-size="4">'
-                 f'AudioTarget card: {layout.size_mm:g} mm, markers {layout.marker_mm:g} mm, '
-                 f'IDs {layout.id_base}-{layout.id_base + 3}, bullseye {2 * r_outer:.0f} mm</text>')
+    notes = [
+        "Scale check: the bar above must measure 100 mm. If not, reprint at 100% / Actual size.",
+        f"Card {layout.size_mm:g} mm, markers {layout.marker_mm:g} mm, marker IDs "
+        f"{layout.id_base}-{layout.id_base + 3}, bullseye {2 * r_outer:.0f} mm.",
+        "Matte paper glued to cardboard works best. Keep the white border around each corner square.",
+    ]
+    for i, line in enumerate(notes):
+        parts.append(f'<text x="{ox}" y="{by + 8 + 6 * i}" font-family="sans-serif" font-size="3.6">'
+                     f'{line}</text>')
     parts.append("</svg>")
     return "\n".join(parts)
 
@@ -93,7 +100,15 @@ def main() -> int:
     if 2 * (a.marker + a.margin) >= a.size:
         ap.error("markers don't fit on the card")
     layout = CardLayout(a.size, a.marker, a.margin, a.id_base)
-    Path(a.output).write_text(build(layout, PAGES[a.page], a.bullseye), encoding="utf-8")
+    svg = build(layout, PAGES[a.page], a.bullseye)
+    if a.output.lower().endswith(".pdf"):
+        try:
+            import cairosvg
+        except ImportError:
+            ap.error("PDF output needs cairosvg: pip install cairosvg (or write .svg instead)")
+        cairosvg.svg2pdf(bytestring=svg.encode("utf-8"), write_to=a.output)
+    else:
+        Path(a.output).write_text(svg, encoding="utf-8")
     print(f"wrote {a.output}: match these in config: card_size_mm={a.size:g}, "
           f"marker_size_mm={a.marker:g}, marker_margin_mm={a.margin:g}, marker_id_base={a.id_base}")
     return 0
