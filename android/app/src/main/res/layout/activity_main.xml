@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Landscape: camera view on the left (for a sighted helper), big buttons on the right.
+     Top row is the one you'll use most: Zero, Where is it, Mute. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+    <androidx.camera.view.PreviewView
+        android:id="@+id/preview"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:importantForAccessibility="no" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="2"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:padding="6dp"
+            android:text="Starting"
+            android:textSize="16sp" />
+
+        <LinearLayout style="@style/Row">
+            <Button android:id="@+id/btn_zero" style="@style/BigButton" android:text="Zero" />
+            <Button android:id="@+id/btn_where" style="@style/BigButton" android:text="Where is the target" />
+            <Button android:id="@+id/btn_mute" style="@style/BigButton" android:text="Mute" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/Row">
+            <Button android:id="@+id/btn_zoom" style="@style/BigButton" />
+            <Button android:id="@+id/btn_pace" style="@style/BigButton" />
+            <Button android:id="@+id/btn_track" style="@style/BigButton" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/Row">
+            <Button android:id="@+id/btn_step" style="@style/BigButton" />
+            <Button android:id="@+id/btn_conf" style="@style/BigButton" />
+            <Button android:id="@+id/btn_status" style="@style/BigButton" android:text="Status" />
+        </LinearLayout>
+
+        <LinearLayout style="@style/Row">
+            <Button android:id="@+id/btn_model" style="@style/BigButton" android:text="Load model" />
+            <Button android:id="@+id/btn_keys" style="@style/BigButton" />
+            <Button android:id="@+id/btn_announce" style="@style/BigButton" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

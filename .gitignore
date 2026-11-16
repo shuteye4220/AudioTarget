@@ -1,9 +1,3 @@
-# west workspace (created by `west init -l firmware` in the repo root)
-/.west/
-/zephyr/
-/modules/
-/bootloader/
-/tools/
 build*/
 __pycache__/
 *.pyc

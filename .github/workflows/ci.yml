@@ -2,7 +2,6 @@ name: CI
 
 on:
   push:
-    branches: [main]
   pull_request:
 
 permissions:
@@ -41,6 +40,24 @@ jobs:
           python-version: "3.12"
       - uses: zephyrproject-rtos/action-zephyr-setup@v1
         with:
-          app-path: AudioTarget/firmware
+          app-path: AudioTarget
           toolchains: arm-zephyr-eabi
       - run: west build -p -b xiao_ble/nrf52840/sense -d build AudioTarget/firmware -- -DAT_BLE=${{ matrix.ble }}
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Unit tests and debug APK
+        run: gradle --no-daemon -p android testDebugUnitTest assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audiotarget-android-prototype
+          path: android/app/build/outputs/apk/debug/*.apk

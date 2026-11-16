@@ -1,4 +1,6 @@
-# West manifest: `west init -l firmware && west update` fetches Zephyr and
+# West manifest. From the folder that contains this repo:
+#   west init -l AudioTarget && west update
+# fetches Zephyr and
 # only the modules this firmware needs.
 manifest:
   remotes:

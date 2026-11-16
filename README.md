@@ -72,10 +72,12 @@ In short:
 
 ```
 pip install west
-west init -l firmware && west update
+mkdir at-workspace && cd at-workspace
+git clone https://github.com/shuteye4220/AudioTarget
+west init -l AudioTarget && west update      # fetches Zephyr next to the repo
 pip install -r zephyr/scripts/requirements.txt
-west build -b xiao_ble/nrf52840/sense firmware                 # wire + Bluetooth
-west build -b xiao_ble/nrf52840/sense firmware -- -DAT_BLE=OFF # wire only, smaller
+west build -b xiao_ble/nrf52840/sense AudioTarget/firmware                  # wire + Bluetooth
+west build -b xiao_ble/nrf52840/sense AudioTarget/firmware -- -DAT_BLE=OFF  # wire only
 ```
 
 The result is `build/zephyr/zephyr.uf2`. Unit tests for the maths and protocol

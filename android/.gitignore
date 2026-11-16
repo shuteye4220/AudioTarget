@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+# A model you bundle yourself (AGPL, see docs/ml.md); not committed.
+app/src/main/assets/*.onnx
