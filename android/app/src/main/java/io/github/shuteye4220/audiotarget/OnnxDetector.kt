@@ -26,6 +26,7 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
     @Volatile var conf = 0.25f
     private var tries = 0
     private val input: FloatBuffer
+    private lateinit var plane: FloatArray
 
     init {
         val opts = OrtSession.SessionOptions()
@@ -43,6 +44,7 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
         classNames = YoloDecode.classNames(names)
         classes = IntArray(YoloDecode.classCount(names)) { it }
         input = ByteBuffer.allocateDirect(4 * 3 * size * size).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        plane = FloatArray(size * size)
     }
 
     override fun detect(f: Frame): Detection? {
@@ -63,9 +65,9 @@ class OnnxDetector(modelPath: String, useXnnpack: Boolean) : SlowDetector, AutoC
         val nh = (rh * scale).toInt()
         val left = (size - nw) / 2
         val top = (size - nh) / 2
-        val plane = size * size
         input.rewind()
-        val tmp = FloatArray(plane) { 114f / 255f }
+        val tmp = plane
+        tmp.fill(114f / 255f)
         for (y in 0 until nh) {
             val sy = y0 + min(rh - 1, (y / scale).toInt())
             val row = (top + y) * size + left

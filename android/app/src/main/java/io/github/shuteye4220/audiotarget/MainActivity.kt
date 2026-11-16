@@ -161,8 +161,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         cameraExecutor.shutdown()
-        tracker?.close()
-        modelExecutor.execute { detector?.close() }
+        modelExecutor.execute {
+            tracker?.close()
+            detector?.close()
+        }
         modelExecutor.shutdown()
         announcer.shutdown()
     }
@@ -227,12 +229,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 return@execute
             }
             d.conf = confs[idx("conf")]
-            val old = detector
-            val t = MlTracker(d)
-            tracker?.close()
+            val oldDetector = detector
+            val oldTracker = tracker
+            tracker = MlTracker(d)
             detector = d
-            tracker = t
-            old?.close()
+            oldTracker?.close()   // waits for any detection still running on the old model
+            oldDetector?.close()
             runOnUiThread {
                 applyPace()
                 val names = if (d.classNames.isEmpty()) "" else ", looking for ${d.classNames.joinToString(", ")}"

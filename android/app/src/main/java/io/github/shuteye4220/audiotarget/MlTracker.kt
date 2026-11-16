@@ -27,8 +27,9 @@ class MlTracker(private val detector: SlowDetector) {
     private val result = AtomicReference<Pair<Frame, Detection?>?>(null)
     private var lastSubmit = 0L
 
-    private var template: Template? = null
-    private var pos: Pair<Double, Double>? = null
+    // Written by the camera thread, reset from the UI thread.
+    @Volatile private var template: Template? = null
+    @Volatile private var pos: Pair<Double, Double>? = null
     private var size = 0.0
     private var score = 0.0
 
@@ -50,7 +51,7 @@ class MlTracker(private val detector: SlowDetector) {
         if (!busy.compareAndSet(false, true)) return
         lastSubmit = now
         val copy = Frame(f.data.copyOf(), f.w, f.h)
-        worker.execute {
+        try { worker.execute {
             val t0 = System.nanoTime()
             val det = try { detector.detect(copy) } catch (e: Exception) { null }
             lastInferenceMs = (System.nanoTime() - t0) / 1_000_000
@@ -60,6 +61,8 @@ class MlTracker(private val detector: SlowDetector) {
             }
             result.set(copy to det)
             busy.set(false)
+        } } catch (e: java.util.concurrent.RejectedExecutionException) {
+            busy.set(false) // closed while a model swap was in progress
         }
     }
 
@@ -101,8 +104,10 @@ class MlTracker(private val detector: SlowDetector) {
         return Detection(m.first, m.second, size, score)
     }
 
+    /** Stop the worker and wait for a running detection to finish. */
     fun close() {
-        worker.shutdownNow()
+        worker.shutdown()
+        worker.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)
     }
 
     companion object {
