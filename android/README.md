@@ -44,8 +44,14 @@ laptop, teddy bear, stop sign, fire hydrant or car. Big, plain objects like
 chairs and suitcases make good practice targets. The model has no "head"
 type; it finds whole people.
 
-When it locks on, it says what it found ("Chair found"). "Where is the target"
-also names it ("Chair 1.2 degrees right, level").
+It always tells you what it's on:
+
+- When it locks on: "Chair found".
+- If it moves to a different kind of object and stays there for most of a
+  second: "Now on person".
+- When you zero: "Zeroed on chair".
+- "Where is the target" names it too: "Chair 1.2 degrees right, level".
+- "Target lost" when it can't see anything for a second.
 
 That built-in model is Ultralytics' and is AGPL-3.0 licensed, so the APK as a
 whole falls under AGPL-3.0. The app's own code here stays MIT.
@@ -80,6 +86,7 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Minimum score | How sure the model must be: 0.15, 0.25 or 0.4 |
 | Status | Camera frame rate, zoom, field of view, model time per detection and detections per second |
 | Model | Built-in objects, or your own file |
+| Detail | Auto, high (640 input, sees smaller and further things) or fast (320 input, about 4 times less work) |
 | Load model | Pick a `.onnx` file |
 | Volume keys as buttons | When on: volume up = Zero, volume down = Where is the target |
 | Announcements | "Target found" / "Target lost" on or off |
@@ -87,6 +94,24 @@ Hold the phone in landscape, camera facing the target, like a scope.
 With a screen reader running (Backtalk, TalkBack), announcements go through
 the screen reader, in its own voice and at its own rate. Without one, the app
 uses text-to-speech.
+
+## Other phones (Samsung and others)
+
+The app should run on any phone with Android 10 or newer: Galaxy A and S
+series, Pixels and others. Every release build is started on Android 10 and
+Android 15 emulators first, and only published if it starts, loads the model,
+runs it, and shows every button on screen.
+
+- **Slower phones:** with Detail on "auto", the app times its first few
+  detections. If the detailed model takes more than a quarter of a second, it
+  says so, switches to the fast model and remembers that.
+- **No telephoto:** zoom asks for 5x; a phone without a telephoto lens gives
+  you as much digital zoom as it has. Aiming still works; range is shorter.
+- **No gyroscope:** budget phones without a gravity sensor use a smoothed
+  accelerometer for the tilt guidance instead.
+- **Navigation bar:** on Android 15 and later (One UI 7), apps draw right to
+  the screen edges. The app keeps its buttons clear of the navigation bar,
+  status bar and camera cut-out.
 
 ## What it measures that the Pi can't yet
 

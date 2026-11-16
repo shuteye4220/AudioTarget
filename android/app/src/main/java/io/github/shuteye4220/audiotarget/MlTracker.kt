@@ -38,6 +38,13 @@ class MlTracker(private val detector: SlowDetector) {
     @Volatile var lastInferenceMs = 0L
         private set
     private val runTimes = ArrayDeque<Long>()
+    private val inferTimes = ArrayDeque<Long>()
+    @Volatile var runs = 0
+        private set
+    val medianInferenceMs: Long
+        get() = synchronized(inferTimes) {
+            if (inferTimes.isEmpty()) 0 else inferTimes.sorted()[inferTimes.size / 2]
+        }
     val runsPerSecond: Double
         get() = synchronized(runTimes) {
             if (runTimes.size < 2) 0.0 else (runTimes.size - 1) * 1000.0 / (runTimes.last() - runTimes.first()).coerceAtLeast(1)
@@ -56,6 +63,11 @@ class MlTracker(private val detector: SlowDetector) {
             val t0 = System.nanoTime()
             val det = try { detector.detect(copy) } catch (e: Exception) { null }
             lastInferenceMs = (System.nanoTime() - t0) / 1_000_000
+            synchronized(inferTimes) {
+                inferTimes.addLast(lastInferenceMs)
+                while (inferTimes.size > 9) inferTimes.removeFirst()
+            }
+            runs++
             synchronized(runTimes) {
                 runTimes.addLast(System.currentTimeMillis())
                 while (runTimes.size > 20) runTimes.removeFirst()

@@ -26,6 +26,15 @@ class ToneEngine {
     }
 
     private fun loop() {
+        // A phone with no usable audio output (or an emulator) mustn't crash the app.
+        try {
+            play()
+        } catch (e: Exception) {
+            running = false
+        }
+    }
+
+    private fun play() {
         val rate = 48000
         val block = 256
         val minBuf = AudioTrack.getMinBufferSize(rate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)

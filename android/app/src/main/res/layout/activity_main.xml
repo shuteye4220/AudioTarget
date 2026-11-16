@@ -2,6 +2,7 @@
 <!-- Landscape: camera view on the left (for a sighted helper), big buttons on the right.
      Top row is the one you'll use most: Zero, Where is the target, Mute. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="horizontal">
@@ -53,6 +54,7 @@
         </LinearLayout>
 
         <LinearLayout style="@style/Row">
+            <Button android:id="@+id/btn_detail" style="@style/BigButton" />
             <Button android:id="@+id/btn_keys" style="@style/BigButton" />
             <Button android:id="@+id/btn_announce" style="@style/BigButton" />
         </LinearLayout>

@@ -34,6 +34,9 @@ import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -59,6 +62,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     @Volatile private var detector: OnnxDetector? = null
     @Volatile private var tracker: MlTracker? = null
+    @Volatile private var speedChecked = false
+
+    /** For the instrumented smoke test. */
+    fun modelReady(): Boolean = detector != null
 
     // Settings (cycled by buttons, saved in prefs)
     private val zooms = doubleArrayOf(1.0, 2.0, 5.0, 10.0)
@@ -79,6 +86,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var targetEl = 0.0
     private var lastFix = 0L
     private var lastClass = -1
+    private var spokenClass = -1       // the object we last told the user about
+    private var pendingClass = -1      // a different object, waiting to be confirmed
+    private var pendingSince = 0L
     private var zeroAz = 0.0
     private var zeroEl = 0.0
     private var pitchMdeg = 0.0
@@ -93,6 +103,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     @Volatile private var fps = 0.0
 
     @Volatile private var muted = false
+    @Volatile private var displayRotation = Surface.ROTATION_90
 
     private val pickModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importModel(uri)
@@ -102,6 +113,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        // Android 15+ draws apps edge to edge; keep the buttons clear of the
+        // navigation bar, status bar and camera cut-out on every phone.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { v, insets ->
+            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            v.setPadding(b.left, b.top, b.right, b.bottom)
+            insets
+        }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         announcer = Announcer(this, findViewById(R.id.status))
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -141,6 +160,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             say(if (prefs.getBoolean("volkeys", false)) "Volume up zeroes, volume down says where the target is"
                 else "Volume keys back to normal")
         }
+        bind(R.id.btn_detail) {
+            val order = listOf("auto", "high", "fast")
+            val next = order[(order.indexOf(detail()) + 1) % order.size]
+            prefs.edit().putString("detail", next).putBoolean("auto_fast", false).apply()
+            speedChecked = false
+            say("Detail $next")
+            if (!useCustom()) loadModel(initial = false)
+        }
         bind(R.id.btn_announce) {
             prefs.edit().putBoolean("announce", !prefs.getBoolean("announce", true)).apply()
             say(if (prefs.getBoolean("announce", true)) "Announcements on" else "Announcements off")
@@ -165,7 +192,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     override fun onResume() {
         super.onResume()
         val sm = getSystemService(SensorManager::class.java)
-        sm.getDefaultSensor(Sensor.TYPE_GRAVITY)?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        val gravity = sm.getDefaultSensor(Sensor.TYPE_GRAVITY)
+            ?: sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER) // budget phones without a gyroscope
+        gravity?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        displayRotation = if (Build.VERSION.SDK_INT >= 30) display?.rotation ?: Surface.ROTATION_90
+            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
         tone.start()
     }
 
@@ -217,6 +248,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         label(R.id.btn_keys, "Volume keys as buttons: ${if (prefs.getBoolean("volkeys", false)) "on" else "off"}")
         label(R.id.btn_announce, "Announcements: ${if (prefs.getBoolean("announce", true)) "on" else "off"}")
         label(R.id.btn_lookfor, "Look for: ${lookForName()}")
+        label(R.id.btn_detail, "Detail: " + when (detail()) {
+            "high" -> "high"
+            "fast" -> "fast"
+            else -> if (prefs.getBoolean("auto_fast", false)) "auto, using fast" else "auto"
+        })
         label(R.id.btn_modelsrc, "Model: ${if (useCustom()) "your file" else "built-in objects"}")
     }
 
@@ -224,20 +260,43 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     // ------------------------------------------------------------------ model
     private fun modelFile() = File(filesDir, "targets.onnx")
-    private fun builtinFile() = File(filesDir, BUILTIN_ASSET)
     private fun useCustom() = prefs.getBoolean("custom", false) && modelFile().exists()
 
-    /** Copy the built-in model out of the APK (again if the APK's copy changed). */
+    /** "high" = 640 input (sees smaller, further things), "fast" = 320 input. */
+    private fun detail(): String = prefs.getString("detail", "auto") ?: "auto"
+    private fun builtinAsset(): String =
+        if (detail() == "fast" || (detail() == "auto" && prefs.getBoolean("auto_fast", false))) BUILTIN_FAST else BUILTIN_ASSET
+
+    /** Copy a built-in model out of the APK (again if the APK's copy changed). */
     private fun extractBuiltin(): File? = try {
-        val f = builtinFile()
-        assets.openFd(BUILTIN_ASSET).use { fd ->
+        val name = builtinAsset()
+        val f = File(filesDir, name)
+        assets.openFd(name).use { fd ->
             if (!f.exists() || f.length() != fd.length) {
-                assets.open(BUILTIN_ASSET).use { input -> f.outputStream().use { input.copyTo(it) } }
+                assets.open(name).use { input -> f.outputStream().use { input.copyTo(it) } }
             }
         }
         f
     } catch (e: Exception) {
         null
+    }
+
+    /**
+     * On "auto", watch the first few detections; if this phone takes too long
+     * with the detailed model, switch to the fast one once and remember it.
+     */
+    private fun checkSpeed() {
+        val t = tracker ?: return
+        if (detail() != "auto" || useCustom() || prefs.getBoolean("auto_fast", false) || speedChecked) return
+        if (t.runs < 6) return
+        speedChecked = true
+        if (t.medianInferenceMs > SLOW_MS) {
+            prefs.edit().putBoolean("auto_fast", true).apply()
+            runOnUiThread {
+                say("This phone is slow with the detailed model, switching to the fast one.")
+                loadModel(initial = false)
+            }
+        }
     }
 
     private fun loadModel(initial: Boolean) {
@@ -396,6 +455,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             val f = toUprightGrey(img)
             val now = System.currentTimeMillis()
             val det = tracker?.process(f, now)
+            checkSpeed()
             val zoomNow = camera?.cameraInfo?.zoomState?.value?.zoomRatio?.toDouble() ?: 1.0
             synchronized(lock) {
                 frameW = f.w; frameH = f.h
@@ -449,8 +509,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     // ------------------------------------------------------------------ tilt (gravity)
+    private val lowPass = DoubleArray(3)
+    private var lowPassPrimed = false
+
     override fun onSensorChanged(e: SensorEvent) {
-        val (gx, gy, gz) = Triple(e.values[0].toDouble(), e.values[1].toDouble(), e.values[2].toDouble())
+        var (gx, gy, gz) = Triple(e.values[0].toDouble(), e.values[1].toDouble(), e.values[2].toDouble())
+        if (e.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            // Raw accelerometer includes hand movement: smooth it to approximate gravity.
+            if (!lowPassPrimed) { lowPass[0] = gx; lowPass[1] = gy; lowPass[2] = gz; lowPassPrimed = true }
+            lowPass[0] += 0.1 * (gx - lowPass[0]); lowPass[1] += 0.1 * (gy - lowPass[1]); lowPass[2] += 0.1 * (gz - lowPass[2])
+            gx = lowPass[0]; gy = lowPass[1]; gz = lowPass[2]
+        }
         val g = sqrt(gx * gx + gy * gy + gz * gz).coerceAtLeast(1e-3)
         synchronized(lock) {
             // The camera looks out of the back (-Z): elevation of that axis.
@@ -464,9 +533,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     /** Sideways tilt relative to the zero (or to level landscape before zeroing), in mdeg. */
     private fun cantMdeg(): Int {
-        val rotation = if (Build.VERSION.SDK_INT >= 30) display?.rotation
-            else @Suppress("DEPRECATION") windowManager.defaultDisplay.rotation
-        val ref = roll0 ?: when (rotation ?: Surface.ROTATION_90) {
+        val ref = roll0 ?: when (displayRotation) {
             Surface.ROTATION_270 -> -90.0
             else -> 90.0
         }
@@ -493,7 +560,20 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             }
             if (cam && !hadTarget) {
                 hadTarget = true
+                spokenClass = lastClass
+                pendingClass = -1
                 announce = "${className(lastClass)} found"
+            } else if (cam && lastClass != spokenClass) {
+                // Locked onto a different kind of object: say so once it has held
+                // for a moment, so a single doubtful detection doesn't chatter.
+                if (lastClass != pendingClass) {
+                    pendingClass = lastClass
+                    pendingSince = now
+                } else if (now - pendingSince > CLASS_CONFIRM_MS) {
+                    spokenClass = lastClass
+                    pendingClass = -1
+                    announce = "Now on ${className(lastClass).lowercase()}"
+                }
             } else if (!cam && hadTarget) {
                 if (lostSince == 0L) lostSince = now
                 if (now - lostSince > 1000) {
@@ -510,14 +590,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun zero() {
         val camZero: Boolean
+        var zeroedOn = "target"
         synchronized(lock) {
             camZero = System.currentTimeMillis() - lastFix < 300
-            if (camZero) { zeroAz = targetAz; zeroEl = targetEl }
+            if (camZero) { zeroAz = targetAz; zeroEl = targetEl; zeroedOn = className(lastClass).lowercase() }
             pitch0 = pitchMdeg
             roll0 = rollDeg
             tiltZeroed = true
         }
-        say(if (camZero) "Zeroed on target" else "Zeroed, tilt only")
+        say(if (camZero) "Zeroed on $zeroedOn" else "Zeroed, tilt only")
     }
 
     private fun where() {
@@ -552,7 +633,10 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     companion object {
         const val MAX_MODEL_BYTES = 200L * 1024 * 1024
-        const val BUILTIN_ASSET = "coco.onnx"
+        const val BUILTIN_ASSET = "coco.onnx"       // 640 input
+        const val BUILTIN_FAST = "coco320.onnx"     // 320 input, about 4x less work
+        const val SLOW_MS = 250L                    // median ms per detection that counts as slow
+        const val CLASS_CONFIRM_MS = 700L
         const val ANYTHING = "anything"
 
         /** Everyday COCO objects that make sensible practice targets. */
