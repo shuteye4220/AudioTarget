@@ -95,10 +95,31 @@ class CardDetector {
         check(OpenCVLoader.initLocal()) { "OpenCV failed to load" }
         val params = DetectorParameters()
         params.set_cornerRefinementMethod(Objdetect.CORNER_REFINE_SUBPIX)
+        // Tuned for small, distant markers (about 10 px across instead of 15+).
+        params.set_minMarkerPerimeterRate(0.01)
+        params.set_adaptiveThreshWinSizeMin(3)
+        params.set_adaptiveThreshWinSizeMax(33)
+        params.set_adaptiveThreshWinSizeStep(6)
+        params.set_polygonalApproxAccuracyRate(0.05)
+        params.set_minCornerDistanceRate(0.02)
+        params.set_perspectiveRemoveIgnoredMarginPerCell(0.2)
         aruco = ArucoDetector(Objdetect.getPredefinedDictionary(Objdetect.DICT_4X4_50), params)
     }
 
     private var last: Detection? = null
+
+    // Diagnostics for Status: which of the card's corner markers were seen
+    // recently, and whether any markers that aren't ours turned up.
+    private val seenAt = LongArray(4)
+    @Volatile private var otherSeenAt = 0L
+
+    /** e.g. "Card corners seen in the last 2 seconds: 3 of 4". */
+    fun seenSummary(now: Long = System.currentTimeMillis()): String {
+        val n = seenAt.count { now - it < 2000 }
+        val other = now - otherSeenAt < 2000
+        return "Card corners seen in the last 2 seconds: $n of 4" +
+            if (other) ". Also seeing markers that aren't from the AudioTarget card" else ""
+    }
 
     fun reset() {
         last = null
@@ -138,7 +159,11 @@ class CardDetector {
             var found = 0
             for (i in 0 until ids.rows()) {
                 val id = ids.get(i, 0)[0].toInt()
-                if (id !in CardGeometry.IDS) continue
+                if (id !in CardGeometry.IDS) {
+                    otherSeenAt = System.currentTimeMillis()
+                    continue
+                }
+                seenAt[id] = System.currentTimeMillis()
                 val c = corners[i]
                 val pts = (0 until 4).map { k -> c.get(0, k).let { Point(it[0] + x0, it[1] + y0) } }
                 CardGeometry.markerCorners(id).forEach { (mx, my) -> obj.add(Point(mx, my)) }

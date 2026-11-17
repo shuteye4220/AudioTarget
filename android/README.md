@@ -61,12 +61,20 @@ the area changes and holds for a moment. "Where is the target" adds the
 distance and the area, for example "Card 0.4 degrees right, level, 6 metres.
 Aim point: first ring, right". The "Ring callouts" button turns them off.
 
-For range, use Zoom 5x: the corner markers need to be about 15 pixels across
-or more, which on the Pixel 10's telephoto is roughly 10 to 12 m.
+Range: the corner markers need to be about 10 pixels across. At 1x that is
+roughly 4 to 5 m; Zoom 5x (the Pixel 10's telephoto) reaches about 20 m.
+The card needs even light, without glare on the markers, and must be flat.
+
+**If it doesn't find the card:** press **Status**. It says how many of the
+four corner markers it has seen in the last 2 seconds (any one is enough to
+aim). "0 of 4" with the card in view means it can't read the markers: get
+closer, zoom in, or improve the light. Then press **Save camera picture**:
+it saves exactly what the detector sees to Pictures/AudioTarget, which you
+can send in to find out why.
 
 **Everyday objects too.** The APK also has a **built-in object model** (YOLO26n, trained on COCO, a set of 80
-everyday object types). **Look for** chooses "the card, or anything" (the default), "the card only",
-or, for objects only: anything, a person, chair,
+everyday object types). **Look for** chooses "the card, or any object" (the default), "the card only",
+or, for that object only: a person, chair,
 couch, bench, potted plant, bottle, cup, sports ball, backpack, suitcase, TV,
 laptop, teddy bear, stop sign, fire hydrant or car. Big, plain objects like
 chairs and suitcases make good practice targets. The model has no "head"
@@ -106,7 +114,7 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Zero | Saves the current target position (and tilt) as "on target" |
 | Where is the target | Says what and where, for example "Chair 1.2 degrees right, level" |
 | Mute / Unmute | Silences the guidance tone |
-| Look for | The card or anything, the card only, anything, or one kind of object |
+| Look for | The card or any object, the card only, or one kind of object |
 | Ring callouts | Say which ring the aim point is in (card only) |
 | Camera | "USB if plugged in" (the default) or "phone" only |
 | Zoom | 1x, 2x, 5x (the Pixel 10's telephoto lens), 10x. Narrower zoom = longer range |
@@ -114,7 +122,8 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Tracking between detections | On: correlation tracking fills every frame. Off: model answers only |
 | Semitone step | 0.05, 0.1, 0.2 or 0.5 degrees per semitone |
 | Minimum score | How sure the model must be: 0.15, 0.25 or 0.4 |
-| Status | Camera frame rate, zoom, field of view, model time per detection and detections per second |
+| Status | Card corners seen, camera frame rate, zoom, field of view, model time per detection and detections per second |
+| Save camera picture | Saves what the detector sees to Pictures/AudioTarget, for diagnosing |
 | Model | Built-in objects, or your own file |
 | Detail | Auto, high (640 input, sees smaller and further things) or fast (320 input, about 4 times less work) |
 | Load model | Pick a `.onnx` file |

@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.shuteye4220.audiotarget"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3-prototype"
+        versionCode = 4
+        versionName = "0.4-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Processor types to include. Phones from the last several years are all
         // arm64-v8a; x86_64 is for the CI emulators. The published APK is built

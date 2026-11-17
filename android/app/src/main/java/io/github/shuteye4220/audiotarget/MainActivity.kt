@@ -158,6 +158,9 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         bind(R.id.btn_step) { cycle("step", steps.size); say("Each semitone is ${stepName()}") }
         bind(R.id.btn_conf) { cycle("conf", confs.size); detector?.conf = confs[idx("conf")]; say("Minimum score ${confs[idx("conf")]}") }
         bind(R.id.btn_status) { say(statusText()) }
+        bind(R.id.btn_save) {
+            if (camera == null) say("The camera isn't running") else saveRequested = true
+        }
         bind(R.id.btn_model) { pickModel.launch(arrayOf("application/octet-stream", "*/*")) }
         bind(R.id.btn_lookfor) {
             val opts = lookForOptions()
@@ -369,10 +372,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val cardOpts = listOf(CARD_OR_ANY, CARD_ONLY)
         val d = detector ?: return cardOpts
         val names = d.classNames
+        // The card is searched first unless one specific object is chosen. (An old
+        // saved "anything" isn't in this list any more, so it falls back to the card.)
         return cardOpts + if (names.size == 80 && names.firstOrNull() == "person") {
-            listOf(ANYTHING) + COCO_CHOICES.filter { it in names }
+            COCO_CHOICES.filter { it in names }
         } else {
-            listOf(ANYTHING) + names
+            names
         }
     }
 
@@ -482,7 +487,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 it.setSurfaceProvider(findViewById<PreviewView>(R.id.preview).surfaceProvider)
             }
             val selector = ResolutionSelector.Builder()
-                .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
+                .setResolutionStrategy(ResolutionStrategy(Size(1920, 1080), ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER))
                 .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
                 .build()
             val analysis = ImageAnalysis.Builder()
@@ -549,11 +554,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     private var buf = ByteArray(0)
+    @Volatile private var saveRequested = false
 
     private fun analyze(img: ImageProxy) {
         try {
             val f = toUprightGrey(img)
             val now = System.currentTimeMillis()
+            if (saveRequested) {
+                saveRequested = false
+                val copy = Frame(f.data.copyOf(), f.w, f.h)
+                modelExecutor.execute { savePicture(copy) }
+            }
             val lf = lookForName()
             val wantCard = lf == CARD_OR_ANY || lf == CARD_ONLY
             if (wantCard && card == null && !cardFailed) {
@@ -610,6 +621,38 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    /** Save exactly what the detector sees, so a failure can be diagnosed later. */
+    private fun savePicture(f: Frame) {
+        var uri: android.net.Uri? = null
+        val ok = try {
+            val px = IntArray(f.w * f.h) { i ->
+                val v = f.data[i].toInt() and 0xFF
+                (0xFF shl 24) or (v shl 16) or (v shl 8) or v
+            }
+            val bmp = android.graphics.Bitmap.createBitmap(px, f.w, f.h, android.graphics.Bitmap.Config.ARGB_8888)
+            val name = "audiotarget-" + java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                .format(java.util.Date()) + ".png"
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, name)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/AudioTarget")
+            }
+            val u = contentResolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
+                ?: error("no uri")
+            uri = u
+            val written = contentResolver.openOutputStream(u)?.use {
+                bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+            } ?: false
+            bmp.recycle()
+            check(written) { "not written" }
+            true
+        } catch (e: Exception) {
+            uri?.let { u -> runCatching { contentResolver.delete(u, null, null) } }
+            false
+        }
+        runOnUiThread { say(if (ok) "Saved camera picture in Pictures, AudioTarget" else "Couldn't save the picture") }
+    }
+
     private fun toUprightGrey(img: ImageProxy): Frame {
         val plane = img.planes[0]
         val w = img.width
@@ -629,8 +672,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
     }
 
+    private var rbuf = ByteArray(0)
+
+    // Reuses one buffer: everything that keeps a frame past this call copies it.
     private fun rotate(s: ByteArray, w: Int, h: Int, deg: Int): ByteArray {
-        val d = ByteArray(w * h)
+        if (rbuf.size != w * h) rbuf = ByteArray(w * h)
+        val d = rbuf
         when (deg) {
             90 -> for (y in 0 until h) for (x in 0 until w) d[x * h + (h - 1 - y)] = s[y * w + x]
             180 -> for (i in 0 until w * h) d[w * h - 1 - i] = s[i]
@@ -772,8 +819,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val parts = mutableListOf<String>()
         parts += (if (usingUsb) "USB camera" else "Phone camera") +
             if (phoneSupportsUsbCameras()) ", this phone supports USB cameras" else ", this phone doesn't offer USB cameras to apps"
-        parts += "Camera %.0f frames per second, zoom %s, field of view %.0f degrees".format(
-            fps, zoomName(), hfovDeg / zooms[idx("zoom")])
+        val (fw, fh) = synchronized(lock) { frameW to frameH }
+        parts += "Camera %d by %d, %.0f frames per second, zoom %s, field of view %.0f degrees".format(
+            fw, fh, fps, zoomName(), hfovDeg / zooms[idx("zoom")])
+        val lf = lookForName()
+        if (lf == CARD_OR_ANY || lf == CARD_ONLY) {
+            parts += card?.seenSummary() ?: if (cardFailed) "Card detection unavailable" else "Card search starting"
+        }
         if (t == null || d == null) {
             parts += "No model, tilt only"
         } else {
@@ -791,8 +843,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         const val BUILTIN_FAST = "coco320.onnx"     // 320 input, about 4x less work
         const val SLOW_MS = 250L                    // median ms per detection that counts as slow
         const val CLASS_CONFIRM_MS = 700L
-        const val ANYTHING = "anything"
-        const val CARD_OR_ANY = "the card, or anything"
+        const val CARD_OR_ANY = "the card, or any object"
         const val CARD_ONLY = "the card only"
         const val ZONE_CONFIRM_MS = 400L
 

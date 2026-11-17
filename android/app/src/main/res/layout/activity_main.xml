@@ -52,6 +52,7 @@
             <Button android:id="@+id/btn_status" style="@style/BigButton" android:text="Status" />
             <Button android:id="@+id/btn_modelsrc" style="@style/BigButton" />
             <Button android:id="@+id/btn_model" style="@style/BigButton" android:text="Load model" />
+            <Button android:id="@+id/btn_save" style="@style/BigButton" android:text="Save camera picture" />
         </LinearLayout>
 
         <LinearLayout style="@style/Row">
