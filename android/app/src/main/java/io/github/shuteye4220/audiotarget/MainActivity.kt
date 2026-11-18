@@ -1,7 +1,11 @@
 package io.github.shuteye4220.audiotarget
 
 import android.Manifest
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -9,6 +13,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -41,6 +47,7 @@ import androidx.core.view.WindowInsetsCompat
 import java.io.File
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.asin
 import kotlin.math.atan
 import kotlin.math.atan2
@@ -72,6 +79,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     // Settings (cycled by buttons, saved in prefs)
     private val zooms = doubleArrayOf(1.0, 2.0, 5.0, 10.0)
+    // Horizontal view of a USB camera's lens: they rarely report it.
+    private val lensAngles = doubleArrayOf(30.0, 45.0, 60.0, 70.0, 80.0, 90.0, 105.0)
     private val paces = listOf(
         Triple("phone speed", 0L, "phone"),
         Triple("like a Pi 5", 100L, "pi5"),
@@ -82,7 +91,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     // Aim state, guarded by `lock`
     private val lock = Any()
-    private var hfovDeg = 70.0
+    @Volatile private var hfovDeg = 70.0
     private var frameW = 1280
     private var frameH = 720
     private var targetAz = 0.0
@@ -113,6 +122,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     @Volatile private var muted = false
     @Volatile private var displayRotation = Surface.ROTATION_90
     @Volatile private var usingUsb = false
+    @Volatile private var usingUvc = false     // USB camera through the app's own driver
+    @Volatile private var uvcDesc: String? = null
 
     private val pickModel = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) importModel(uri)
@@ -142,11 +153,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             prefs.edit().putString("cam", next).apply()
             when {
                 next == "phone" -> say("Phone camera only")
-                externalIds().isNotEmpty() -> say("USB camera when plugged in")
-                phoneSupportsUsbCameras() -> say("USB camera when plugged in. None found yet.")
-                else -> say("USB camera when plugged in, but this phone doesn't offer USB cameras to apps.")
+                externalIds().isNotEmpty() || UvcCamera.find(usbManager) != null -> say("USB camera when plugged in")
+                else -> say("USB camera when plugged in. None found yet.")
             }
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
+        }
+        bind(R.id.btn_lens) {
+            cycle("lens", lensAngles.size)
+            if (usingUsb && (usingUvc || externalHfov() == null)) hfovDeg = lensDeg()
+            say("USB camera lens ${lensDeg().toInt()} degrees across")
         }
         bind(R.id.btn_zoom) { cycle("zoom", zooms.size); applyZoom(); say("Zoom ${zoomName()}") }
         bind(R.id.btn_pace) { cycle("pace", paces.size); applyPace(); say("Model speed ${paces[idx("pace")].first}") }
@@ -159,7 +174,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         bind(R.id.btn_conf) { cycle("conf", confs.size); detector?.conf = confs[idx("conf")]; say("Minimum score ${confs[idx("conf")]}") }
         bind(R.id.btn_status) { say(statusText()) }
         bind(R.id.btn_save) {
-            if (camera == null) say("The camera isn't running") else saveRequested = true
+            if (camera == null && !usingUvc) say("The camera isn't running") else saveRequested = true
         }
         bind(R.id.btn_model) { pickModel.launch(arrayOf("application/octet-stream", "*/*")) }
         bind(R.id.btn_lookfor) {
@@ -201,6 +216,13 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
         refreshLabels()
 
+        val usbEvents = IntentFilter().apply {
+            addAction(ACTION_USB_PERMISSION)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        ContextCompat.registerReceiver(this, usbReceiver, usbEvents, ContextCompat.RECEIVER_NOT_EXPORTED)
+
         tone.start()
         loadModel(initial = true)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -228,6 +250,26 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tone.start()
     }
 
+    // The phone camera stops with the app (CameraX follows the lifecycle); so
+    // does the USB camera.
+    private var uvcStoppedForBackground = false
+
+    override fun onStart() {
+        super.onStart()
+        if (uvcStoppedForBackground) {
+            uvcStoppedForBackground = false
+            cameraIfAllowed()
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (usingUvc) {
+            uvcStoppedForBackground = true
+            stopUvc()
+        }
+    }
+
     override fun onPause() {
         super.onPause()
         getSystemService(SensorManager::class.java).unregisterListener(this)
@@ -235,8 +277,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         tone.stop() // silence when you leave the app
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // Opened by plugging in a USB camera ("Open AudioTarget"): use it.
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) usbChanged()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        unregisterReceiver(usbReceiver)
+        stopUvc()
         cameraExecutor.shutdown()
         modelExecutor.execute {
             tracker?.close()
@@ -261,7 +311,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         findViewById<Button>(id).setOnClickListener { action(); refreshLabels() }
     }
 
-    private fun idx(key: String): Int = prefs.getInt(key, when (key) { "step" -> 1; "conf" -> 1; "pace" -> 1; else -> 0 })
+    private fun idx(key: String): Int = prefs.getInt(key, when (key) { "step" -> 1; "conf" -> 1; "pace" -> 1; "lens" -> 3; else -> 0 })
+    private fun lensDeg() = lensAngles[idx("lens").coerceIn(lensAngles.indices)]
     private fun cycle(key: String, n: Int) = prefs.edit().putInt(key, (idx(key) + 1) % n).apply()
     private fun zoomName() = "${zooms[idx("zoom")].toInt()} times" + if (zooms[idx("zoom")] >= 5.0) ", telephoto" else ""
     private fun stepName() = "%.2f degrees".format(steps[idx("step")] / 1000.0)
@@ -270,6 +321,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         fun label(id: Int, text: String) { findViewById<Button>(id).text = text }
         label(R.id.btn_mute, if (muted) "Unmute" else "Mute")
         label(R.id.btn_zoom, "Zoom: ${zooms[idx("zoom")].toInt()}x")
+        label(R.id.btn_lens, "USB camera lens: ${lensDeg().toInt()} degrees across")
         label(R.id.btn_pace, "Model speed: ${paces[idx("pace")].first}")
         label(R.id.btn_track, "Tracking between detections: ${if (prefs.getBoolean("track", true)) "on" else "off"}")
         label(R.id.btn_step, "Semitone step: ${stepName()}")
@@ -480,8 +532,22 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             val provider = future.get()
             val wantUsb = prefs.getString("cam", "auto") == "auto"
             val usb = wantUsb && try { provider.hasCamera(externalSelector()) } catch (e: Exception) { false }
+            if (wantUsb && !usb) {
+                // The phone's camera service doesn't offer it: use the app's own driver.
+                val dev = UvcCamera.find(usbManager)
+                if (dev != null && dev.deviceName != uvcGaveUpOn) {
+                    if (usbManager?.hasPermission(dev) == true) {
+                        provider.unbindAll()
+                        camera = null
+                        startUvc(dev)
+                        return@addListener
+                    }
+                    askUsbPermission(dev) // the phone camera runs until it's answered
+                }
+            }
+            stopUvc()
             val cameraSel = if (usb) externalSelector() else CameraSelector.DEFAULT_BACK_CAMERA
-            hfovDeg = (if (usb) externalHfov() else mainCameraHfov()) ?: if (usb) 60.0 else 70.0
+            hfovDeg = (if (usb) externalHfov() ?: lensDeg() else mainCameraHfov()) ?: 70.0
 
             val preview = Preview.Builder().build().also {
                 it.setSurfaceProvider(findViewById<PreviewView>(R.id.preview).surfaceProvider)
@@ -542,8 +608,114 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         null
     }
 
-    /** USB cameras often don't report their optics; then a typical 60 degrees is assumed. */
+    /** USB cameras often don't report their optics; then the "USB camera lens" setting is used. */
     private fun externalHfov(): Double? = externalIds().firstOrNull()?.let { hfovOf(it) }
+
+    // ------------------------------------------------------------------ USB camera, own driver
+    private val usbManager: UsbManager? by lazy { getSystemService(UsbManager::class.java) }
+    private val uvcGen = AtomicInteger()       // bumping it stops the running USB camera loop
+    private var usbAsking: String? = null      // device we're waiting on a permission answer for
+    private var uvcGaveUpOn: String? = null    // refused or failed: don't retry until replugged
+
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            when (i.action) {
+                ACTION_USB_PERMISSION -> {
+                    usbAsking = null
+                    if (i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                        cameraIfAllowed()
+                    } else {
+                        uvcGaveUpOn = UvcCamera.find(usbManager)?.deviceName
+                        say("No permission for the USB camera. Using the phone camera.")
+                    }
+                }
+                UsbManager.ACTION_USB_DEVICE_ATTACHED, UsbManager.ACTION_USB_DEVICE_DETACHED -> usbChanged()
+            }
+        }
+    }
+
+    private fun usbChanged() {
+        uvcGaveUpOn = null
+        usbAsking = null
+        if (prefs.getString("cam", "auto") == "auto") cameraIfAllowed()
+    }
+
+    private fun cameraIfAllowed() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startCamera()
+    }
+
+    private fun askUsbPermission(d: UsbDevice) {
+        if (usbAsking == d.deviceName) return
+        usbAsking = d.deviceName
+        val pi = PendingIntent.getBroadcast(
+            this, 0, Intent(ACTION_USB_PERMISSION).setPackage(packageName),
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        say("USB camera found. Allow AudioTarget to use it.")
+        usbManager?.requestPermission(d, pi)
+    }
+
+    private fun stopUvc() {
+        uvcGen.incrementAndGet()
+    }
+
+    /**
+     * Runs the USB camera on the analysis thread, so its frames and the phone
+     * camera's can never be analysed at the same time.
+     */
+    private fun startUvc(d: UsbDevice) {
+        val my = uvcGen.incrementAndGet()
+        cameraExecutor.execute { runUvc(d, my) }
+    }
+
+    private fun runUvc(d: UsbDevice, my: Int) {
+        if (uvcGen.get() != my) return
+        val cam = try {
+            UvcCamera.open(usbManager ?: throw java.io.IOException("no USB support"), d)
+        } catch (e: Exception) {
+            runOnUiThread {
+                uvcGaveUpOn = d.deviceName
+                say("Couldn't start the USB camera: ${e.message}. Using the phone camera.")
+                cameraIfAllowed()
+            }
+            return
+        }
+        cam.use {
+            val wasUsb = usingUsb
+            uvcDesc = cam.description
+            hfovDeg = lensDeg()
+            usingUsb = true
+            usingUvc = true
+            synchronized(lock) { lastFix = 0 }
+            tracker?.reset()
+            card?.reset()
+            runOnUiThread {
+                refreshLabels()
+                if (!wasUsb) say("Using the USB camera")
+            }
+            var lastFrame = System.currentTimeMillis()
+            var warned = false
+            try {
+                while (uvcGen.get() == my) {
+                    val f = cam.grab(500)
+                    val now = System.currentTimeMillis()
+                    if (f != null) {
+                        lastFrame = now
+                        warned = false
+                        analyzeFrame(f)
+                    } else if (!warned && now - lastFrame > 5000) {
+                        warned = true
+                        runOnUiThread { say("The USB camera isn't sending pictures.") }
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread { say("The USB camera stopped.") }
+            } finally {
+                usingUvc = false
+                uvcDesc = null
+            }
+        }
+    }
 
     private fun applyZoom() {
         val cam = camera ?: return
@@ -558,67 +730,70 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     private fun analyze(img: ImageProxy) {
         try {
-            val f = toUprightGrey(img)
-            val now = System.currentTimeMillis()
-            if (saveRequested) {
-                saveRequested = false
-                val copy = Frame(f.data.copyOf(), f.w, f.h)
-                modelExecutor.execute { savePicture(copy) }
-            }
-            val lf = lookForName()
-            val wantCard = lf == CARD_OR_ANY || lf == CARD_ONLY
-            if (wantCard && card == null && !cardFailed) {
-                card = try { CardDetector() } catch (e: Throwable) {
-                    cardFailed = true
-                    runOnUiThread { say("Card detection isn't available on this phone.") }
-                    null
-                }
-            }
-            val det: Detection? = run {
-                val c = if (wantCard) card?.detect(f) else null
-                if (c != null) {
-                    tracker?.reset() // the card is better: let the model rest
-                    c
-                } else if (lf != CARD_ONLY) {
-                    tracker?.process(f, now).also { checkSpeed() }
-                } else {
-                    null
-                }
-            }
-            val zoomNow = camera?.cameraInfo?.zoomState?.value?.zoomRatio?.toDouble() ?: 1.0
-            synchronized(lock) {
-                frameW = f.w; frameH = f.h
-                frames++
-                if (now - fpsWindowStart >= 2000) {
-                    fps = frames * 1000.0 / (now - fpsWindowStart).coerceAtLeast(1)
-                    frames = 0; fpsWindowStart = now
-                }
-                if (det != null) {
-                    // Pixel -> angle from the optical axis (+right, +up), millidegrees.
-                    val fx = (f.w / 2.0) / tan(Math.toRadians(hfovDeg) / 2) * zoomNow
-                    targetAz = Math.toDegrees(atan2(det.x - f.w / 2.0, fx)) * 1000
-                    targetEl = Math.toDegrees(atan2(f.h / 2.0 - det.y, fx)) * 1000
-                    lastFix = now
-                    lastClass = det.classId
-                    val h = det.cardH
-                    if (h != null) {
-                        // Where on the card does the aim point (the zero, or the
-                        // middle of the picture before zeroing) fall?
-                        val ax = f.w / 2.0 + fx * tan(Math.toRadians(zeroAz / 1000))
-                        val ay = f.h / 2.0 - fx * tan(Math.toRadians(zeroEl / 1000))
-                        val mm = CardGeometry.invert(h)?.let { CardGeometry.apply(it, ax, ay) }
-                        zoneNow = mm?.let { CardGeometry.zone(it.first, it.second) }
-                        cardRangeM = fx * CardGeometry.SIZE_MM / det.size / 1000
-                    } else {
-                        zoneNow = null
-                        cardRangeM = null
-                    }
-                }
-            }
-            updateTone()
+            analyzeFrame(toUprightGrey(img))
         } finally {
             img.close()
         }
+    }
+
+    private fun analyzeFrame(f: Frame) {
+        val now = System.currentTimeMillis()
+        if (saveRequested) {
+            saveRequested = false
+            val copy = Frame(f.data.copyOf(), f.w, f.h)
+            modelExecutor.execute { savePicture(copy) }
+        }
+        val lf = lookForName()
+        val wantCard = lf == CARD_OR_ANY || lf == CARD_ONLY
+        if (wantCard && card == null && !cardFailed) {
+            card = try { CardDetector() } catch (e: Throwable) {
+                cardFailed = true
+                runOnUiThread { say("Card detection isn't available on this phone.") }
+                null
+            }
+        }
+        val det: Detection? = run {
+            val c = if (wantCard) card?.detect(f) else null
+            if (c != null) {
+                tracker?.reset() // the card is better: let the model rest
+                c
+            } else if (lf != CARD_ONLY) {
+                tracker?.process(f, now).also { checkSpeed() }
+            } else {
+                null
+            }
+        }
+        val zoomNow = if (usingUvc) 1.0 else camera?.cameraInfo?.zoomState?.value?.zoomRatio?.toDouble() ?: 1.0
+        synchronized(lock) {
+            frameW = f.w; frameH = f.h
+            frames++
+            if (now - fpsWindowStart >= 2000) {
+                fps = frames * 1000.0 / (now - fpsWindowStart).coerceAtLeast(1)
+                frames = 0; fpsWindowStart = now
+            }
+            if (det != null) {
+                // Pixel -> angle from the optical axis (+right, +up), millidegrees.
+                val fx = (f.w / 2.0) / tan(Math.toRadians(hfovDeg) / 2) * zoomNow
+                targetAz = Math.toDegrees(atan2(det.x - f.w / 2.0, fx)) * 1000
+                targetEl = Math.toDegrees(atan2(f.h / 2.0 - det.y, fx)) * 1000
+                lastFix = now
+                lastClass = det.classId
+                val h = det.cardH
+                if (h != null) {
+                    // Where on the card does the aim point (the zero, or the
+                    // middle of the picture before zeroing) fall?
+                    val ax = f.w / 2.0 + fx * tan(Math.toRadians(zeroAz / 1000))
+                    val ay = f.h / 2.0 - fx * tan(Math.toRadians(zeroEl / 1000))
+                    val mm = CardGeometry.invert(h)?.let { CardGeometry.apply(it, ax, ay) }
+                    zoneNow = mm?.let { CardGeometry.zone(it.first, it.second) }
+                    cardRangeM = fx * CardGeometry.SIZE_MM / det.size / 1000
+                } else {
+                    zoneNow = null
+                    cardRangeM = null
+                }
+            }
+        }
+        updateTone()
     }
 
     /** Save exactly what the detector sees, so a failure can be diagnosed later. */
@@ -817,11 +992,17 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val t = tracker
         val d = detector
         val parts = mutableListOf<String>()
-        parts += (if (usingUsb) "USB camera" else "Phone camera") +
-            if (phoneSupportsUsbCameras()) ", this phone supports USB cameras" else ", this phone doesn't offer USB cameras to apps"
+        val desc = uvcDesc
+        parts += when {
+            usingUvc && desc != null -> "USB camera, through the app's own driver: $desc"
+            usingUsb -> "USB camera"
+            else -> "Phone camera"
+        } + if (phoneSupportsUsbCameras()) ". This phone offers USB cameras to apps"
+            else ". This phone doesn't offer USB cameras to apps, so the app uses its own USB driver"
         val (fw, fh) = synchronized(lock) { frameW to frameH }
-        parts += "Camera %d by %d, %.0f frames per second, zoom %s, field of view %.0f degrees".format(
-            fw, fh, fps, zoomName(), hfovDeg / zooms[idx("zoom")])
+        val zoom = if (usingUvc) 1.0 else zooms[idx("zoom")]
+        parts += "Picture %d by %d, %.0f frames per second, %s, field of view %.0f degrees".format(
+            fw, fh, fps, if (usingUvc) "no zoom" else "zoom ${zoomName()}", hfovDeg / zoom)
         val lf = lookForName()
         if (lf == CARD_OR_ANY || lf == CARD_ONLY) {
             parts += card?.seenSummary() ?: if (cardFailed) "Card detection unavailable" else "Card search starting"
@@ -844,6 +1025,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         const val SLOW_MS = 250L                    // median ms per detection that counts as slow
         const val CLASS_CONFIRM_MS = 700L
         const val CARD_OR_ANY = "the card, or any object"
+        const val ACTION_USB_PERMISSION = "io.github.shuteye4220.audiotarget.USB_PERMISSION"
         const val CARD_ONLY = "the card only"
         const val ZONE_CONFIRM_MS = 400L
 

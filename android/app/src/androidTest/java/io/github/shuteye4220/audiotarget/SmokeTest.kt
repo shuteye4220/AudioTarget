@@ -102,7 +102,7 @@ class SmokeTest {
                 val screen = Rect()
                 root.getGlobalVisibleRect(screen)
                 for (id in listOf(R.id.btn_zero, R.id.btn_where, R.id.btn_mute, R.id.btn_lookfor,
-                        R.id.btn_detail, R.id.btn_announce, R.id.btn_keys, R.id.btn_rings, R.id.btn_camera, R.id.btn_save)) {
+                        R.id.btn_detail, R.id.btn_announce, R.id.btn_keys, R.id.btn_rings, R.id.btn_camera, R.id.btn_save, R.id.btn_lens)) {
                     val r = Rect()
                     val v = a.findViewById<View>(id)
                     assertTrue("${a.resources.getResourceEntryName(id)} visible", v.getGlobalVisibleRect(r))

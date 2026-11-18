@@ -6,13 +6,14 @@ plugins {
 android {
     namespace = "io.github.shuteye4220.audiotarget"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "io.github.shuteye4220.audiotarget"
         minSdk = 29
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.4-prototype"
+        versionCode = 5
+        versionName = "0.5-prototype"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Processor types to include. Phones from the last several years are all
         // arm64-v8a; x86_64 is for the CI emulators. The published APK is built
@@ -51,6 +52,13 @@ android {
     }
     kotlinOptions {
         jvmTarget = "17"
+    }
+    // USB camera driver (libusb + libuvc), for phones that don't offer USB cameras to apps.
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
     androidResources {
         noCompress += "onnx"

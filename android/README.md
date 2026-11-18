@@ -117,6 +117,7 @@ Hold the phone in landscape, camera facing the target, like a scope.
 | Look for | The card or any object, the card only, or one kind of object |
 | Ring callouts | Say which ring the aim point is in (card only) |
 | Camera | "USB if plugged in" (the default) or "phone" only |
+| USB camera lens | How wide the USB camera sees, 30 to 105 degrees across |
 | Zoom | 1x, 2x, 5x (the Pixel 10's telephoto lens), 10x. Narrower zoom = longer range |
 | Model speed | Phone speed / like a Pi 5 (10 a second) / like a Pi Zero 2 W (1 a second) |
 | Tracking between detections | On: correlation tracking fills every frame. Off: model answers only |
@@ -142,11 +143,25 @@ It says which it's using. That suits a camera on the gun with the phone in your
 pocket. In that setup the phone's own tilt says nothing about your aim, so tilt
 guidance and the sideways-tilt flutter are off while the USB camera is in use.
 
-**The catch:** Android only offers USB cameras to apps on phones whose makers
-switched that on, and most phones haven't. Press Status: it says whether this
-phone supports USB cameras. If yours doesn't, a USB camera would need the app
-to carry its own USB camera driver (a UVC library). That's possible, but it's
-a bigger job and works on some phones and not others.
+**Phones that don't offer USB cameras to apps** (most, Pixels included): the
+app carries its own USB camera driver (libusb and libuvc, built in). When you
+plug a camera in, Android asks whether AudioTarget may use it; say yes, or pick
+AudioTarget in the "open with" prompt to make that permanent for that camera.
+Status then says "USB camera, through the app's own driver" and the picture
+format it chose (the largest up to 1920 by 1080 that runs at 10 frames a
+second or more, MJPEG preferred).
+
+- **Any UVC webcam should work.** A "UVC" camera needs no drivers on a PC.
+  Plug it in with a USB-C OTG adapter or a USB-C cable.
+- **GrapheneOS:** plug the camera in while the phone is unlocked. The USB-C
+  port setting can block new devices while the phone is locked.
+- **Set the lens angle.** USB cameras don't tell the phone how wide they see,
+  so press **USB camera lens** until it matches the camera's horizontal view
+  (30 to 105 degrees; the default is 70). It only matters for the degrees the
+  app speaks and the semitone step; Zero works whatever it's set to.
+- **No zoom:** the Zoom button only applies to the phone's own camera.
+- If a camera won't start, the app says why and goes back to the phone camera;
+  it tries again when you unplug and replug it.
 
 ## Other phones (Samsung and others)
 

@@ -46,6 +46,7 @@
             <Button android:id="@+id/btn_track" style="@style/BigButton" />
             <Button android:id="@+id/btn_step" style="@style/BigButton" />
             <Button android:id="@+id/btn_conf" style="@style/BigButton" />
+            <Button android:id="@+id/btn_lens" style="@style/BigButton" />
         </LinearLayout>
 
         <LinearLayout style="@style/Row">
