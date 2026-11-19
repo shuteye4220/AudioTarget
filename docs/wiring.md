@@ -13,7 +13,7 @@ Pins are the labels printed on the XIAO (D0, D1 and so on).
 | D6 (TX) | Wired link only: Pi GPIO15 / RXD, header pin 10 |
 | D7 (RX) | Wired link only: Pi GPIO14 / TXD, header pin 8 |
 | GND | Button commons, jack sleeve, Pi ground (header pin 6) for the wired link |
-| BAT+ / BAT- pads (underside) | LiPo, through the slide switch on the + lead |
+| BAT+ / BAT- pads (underside) | LiPo (602030 size), through the slide switch on the + lead |
 
 The buttons need no resistors: the firmware turns on internal pull-ups.
 
@@ -41,6 +41,10 @@ Build an identical second copy from D1 to the jack RING (right channel).
   for example) instead.
 
 ### Power
+
+If the LiPo comes with a plug, cut it off and solder the wires directly.
+Small cells often have their wire colours swapped, so check which lead is +
+with a meter (or ask the seller) before soldering it to BAT+.
 
 The XIAO charges the LiPo whenever USB-C is plugged in. With the wired link,
 you can also run a fourth wire from the Pi's 5 V (header pin 2) to the XIAO's

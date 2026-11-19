@@ -6,6 +6,9 @@
 // with a round cap on ZERO (toward the muzzle) and a square cap on MODE
 // (toward you). Caps must stand at least 2 mm proud of the switch stem.
 // Battery switch: a mini slide switch (SS12D00 style) behind the left-wall slot.
+// Battery: the bay in front of the rib is about 30.8 x 32 x 16 mm, so use a
+// 602030 LiPo (30 x 20 x 6 mm, about 300 mAh) or smaller. A 502035 (35 mm
+// long) does not fit.
 include <lib.scad>
 
 part = "both";          // "tray", "lid" or "both"

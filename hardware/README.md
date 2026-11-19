@@ -24,6 +24,9 @@ sources: change the settings at the top of each and export again.
 
 ## Fit
 
+- **Battery:** the bay is about 30 mm long, 32 mm wide and 16 mm tall. Use a
+  602030 LiPo (30 x 20 x 6 mm, about 300 mAh) or smaller; 35 mm cells such as
+  the 502035 don't fit.
 - `clear` in `lib.scad` (default 0.25 mm) sets every fit gap. If the clamp won't
   slide onto the rail, raise it to 0.3 or 0.4 and export again.
 - The clamps slide on from the end of the rail. The M4 cross bolt passes through

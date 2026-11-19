@@ -44,7 +44,8 @@ power for both are in **docs/layouts.md**.
 
 In short:
 
-- **Gun module (both layouts):** Seeed XIAO nRF52840 Sense, small LiPo, two
+- **Gun module (both layouts):** Seeed XIAO nRF52840 Sense, a 300 mAh LiPo
+  (602030 size: 30 x 20 x 6 mm, no longer than 30 mm), two
   tactile buttons, 3.5 mm jack, a few resistors and capacitors.
 - **Layout 1:** a Pi HQ camera or USB camera on a rail mount, and any Pi in a
   belt case with three menu buttons and a power bank.
