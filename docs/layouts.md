@@ -26,7 +26,7 @@ module also works alone, with no Pi or camera, for tilt-only guidance.
 | Qty | Part | Notes |
 |---|---|---|
 | 1 | Seeed Studio XIAO nRF52840 **Sense** or **Sense Plus** | Must be a Sense: it has the motion sensor. The Sense Plus adds 9 extra solder pads, ships without pin headers, and runs the same firmware file |
-| 1 | LiPo cell, 3.7 V, 300 to 500 mAh, about 35 x 20 x 5 mm (502035 size) | Solders to the XIAO's battery pads; charges over USB-C |
+| 1 | LiPo cell, 3.7 V, about 300 mAh, 30 x 20 x 6 mm (602030 size) or smaller, with protection circuit | Solders to the XIAO's battery pads; charges over USB-C. The battery bay is 30 mm long, so 35 mm cells (502035) don't fit |
 | 1 | Mini slide switch (SS12D00 style) | In the battery + lead |
 | 2 | 12 x 12 mm tactile switches | One with a **round** cap (ZERO), one with a **square** cap (MODE) |
 | 1 | 3.5 mm stereo panel jack, 6 mm thread (PJ-392 style) | Headphone output |
@@ -39,7 +39,7 @@ module also works alone, with no Pi or camera, for tilt-only guidance.
 | | Printed: `nrf_box_tray.stl`, `nrf_box_lid.stl` | |
 
 Battery life: the gun module draws a few milliamps when tracking. Expect
-roughly a day of use from 400 mAh, and much longer on standby. These are
+roughly most of a day of use from 300 mAh, and much longer on standby. These are
 estimates, not measurements yet.
 
 ---
